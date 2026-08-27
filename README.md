@@ -63,25 +63,39 @@ why your proximity udev rule already "works") — the accelerometer,
 inclinometer and hinge-angle sensors never come up, so there's no
 posture data for anything downstream to use.
 
-The correct firmware for this exact model
-(`HP OmniBook Ultra Flip Laptop 14-fh0xxx`) has been submitted upstream
-but is **still a draft, not merged**, as of this writing:
+Confirmed via `sudo dmesg | grep -i ish`:
+
+```
+intel_ish_ipc 0000:00:12.0: ISH loader: load firmware: intel/ish/ish_lnlm.bin
+intel_ish_ipc 0000:00:12.0: ISH loader: cmd 2 failed 10   (x3)
+```
+
+The generic blob *loads* (no file-not-found error) but gets rejected by
+the sensor hub — wrong firmware image for this board, not a missing
+file. The kernel here always asks for the plain `intel/ish/ish_lnlm.bin`
+path, so the fix is to make our own copy of that exact filename win over
+linux-firmware's copy — not add a differently-named file.
+
+The correct bytes for this exact model
+(`HP OmniBook Ultra Flip Laptop 14-fh0xxx`) have been submitted upstream
+but are **still a draft, not merged**, as of this writing:
 <https://gitlab.com/kernel-firmware/linux-firmware/-/merge_requests/746>
 
 `modules/sensors.nix` has a ready-to-uncomment `hardware.firmware` block
 for this. To finish it:
 
-1. Boot and run `sudo dmesg | grep -i ish` — the kernel will log the
-   exact firmware filename(s) it tried and failed to load. That's the
-   filename you need, not a guess.
-2. Get the actual bytes, either by pulling the `.bin` out of the linked
+1. Get the actual bytes, either by pulling the `.bin` out of the linked
    MR's branch, or by extracting it from HP's Windows "Intel Dynamic
    Tuning / ISH" driver SoftPaq for this model from support.hp.com
    (download the `.exe`, extract with `7z x sp######.exe` on Linux, look
    for a same-named `.bin`).
-3. Save it as `modules/firmware/<filename>.bin`, fix the filename in
-   `modules/sensors.nix` to match, uncomment the block, rebuild.
-4. Once the upstream MR merges and a nixpkgs update picks it up, delete
+2. Save it as `modules/firmware/ish_lnlm.bin` (same filename as the
+   stock one — that's what makes it override rather than add).
+3. Uncomment the `hardware.firmware` block in `modules/sensors.nix` and
+   rebuild.
+4. Check `sudo dmesg | grep -i ish` again — you want "firmware loaded"
+   with no `cmd 2 failed` after it.
+5. Once the upstream MR merges and a nixpkgs update picks it up, delete
    the whole block — it becomes redundant.
 
 ### 2. Plasma also needs `qtsensors` explicitly

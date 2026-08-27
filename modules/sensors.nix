@@ -35,32 +35,28 @@
 
   # --- The actual blocker: model-specific ISH firmware -------------------
   #
-  # As shipped, linux-firmware only has a *generic* Lunar Lake ISH blob
-  # (intel/ish/ish_lnlm.bin). This laptop's ISH controller needs a
-  # vendor-specific variant, selected by the kernel via a filename built
-  # from CRC32 hashes of your DMI strings. Without it, intel_ish_ipc only
-  # brings up the proximity sensor (which is why the proximity udev rule
-  # below already works) and never brings up the accelerometer/hinge
-  # sensors that tablet-mode detection needs.
+  # Confirmed via `dmesg | grep -i ish`:
   #
-  # The fix for this exact model is written but NOT YET MERGED upstream:
+  #   ISH loader: load firmware: intel/ish/ish_lnlm.bin
+  #   ISH loader: cmd 2 failed 10          (repeats 3x)
+  #
+  # The generic Lunar Lake blob linux-firmware ships as
+  # intel/ish/ish_lnlm.bin *loads* fine but is rejected by this board's
+  # ISH controller ("cmd 2 failed" = firmware image mismatch, not a
+  # missing-file error). This kernel isn't doing DMI-hash-based vendor
+  # firmware selection — it always asks for that exact plain filename —
+  # so the fix is to make our own copy of that exact path win over
+  # linux-firmware's, rather than add a new hashed filename.
+  #
+  # The correct bytes for this exact model
+  # (HP OmniBook Ultra Flip Laptop 14-fh0xxx) are written but NOT YET
+  # MERGED upstream:
   #   https://gitlab.com/kernel-firmware/linux-firmware/-/merge_requests/746
   # Track that MR; once it lands in a linux-firmware release, this whole
   # block becomes unnecessary and can be deleted.
   #
   # Until then:
-  #   1. Find the exact filename the kernel is asking for:
-  #        sudo dmesg | grep -i ish
-  #      or, once you're on a kernel with vendor-firmware support:
-  #        sudo dmidecode -s system-manufacturer
-  #        sudo dmidecode -s system-product-name
-  #      then compute: ish_lnlm_<crc32(manufacturer)>_<crc32(product-name)>.bin
-  #      (8 hex digits each, zero-padded). For this exact model, that
-  #      currently works out to:
-  #        intel/ish/ish_lnlm_00b9115e_cf5da58b.bin
-  #      but always double check against your own dmesg output.
-  #
-  #   2. Get the actual firmware bytes. Two options:
+  #   1. Get the actual firmware bytes. Two options:
   #      a) Pull the .bin out of the still-open MR above (download the
   #         patch/diff from the branch and extract the binary blob), or
   #      b) Extract it from HP's Windows Intel ISH driver package
@@ -68,17 +64,25 @@
   #         driver .exe, extract it (e.g. `7z x sp######.exe` on Linux),
   #         and look for a similarly-named .bin under the driver payload.
   #
-  #   3. Drop the resulting file at ./firmware/ish_lnlm_<...>.bin next to
-  #      this module, fix the filename below to match, and uncomment
-  #      the block.
+  #   2. Save it as ./firmware/ish_lnlm.bin next to this module (same
+  #      filename as the stock one — that's what makes it "override"
+  #      rather than "add").
   #
-  # hardware.firmware = [
-  #   (pkgs.runCommand "ish-lnlm-hp-omnibook-firmware" { } ''
-  #     mkdir -p $out/lib/firmware/intel/ish
-  #     install -Dm444 ${./firmware/ish_lnlm_00b9115e_cf5da58b.bin} \
-  #       $out/lib/firmware/intel/ish/ish_lnlm_00b9115e_cf5da58b.bin
-  #   '')
-  # ];
+  #   3. Uncomment the block below and rebuild. hardware.firmware is a
+  #      *list of directories*, searched in order, first match wins —
+  #      mkBefore puts ours ahead of linux-firmware's regardless of
+  #      module ordering elsewhere in the config.
+  #
+  #   4. Verify with `sudo dmesg | grep -i ish` again after reboot: you
+  #      should see "firmware loaded" with no "cmd 2 failed" after it.
+  #
+  hardware.firmware = lib.mkBefore [
+    (pkgs.runCommand "ish-lnlm-hp-omnibook-firmware" { } ''
+      mkdir -p $out/lib/firmware/intel/ish
+      install -Dm444 ${./firmware/ish_lnlm.bin} \
+        $out/lib/firmware/intel/ish/ish_lnlm.bin
+    '')
+  ];
 
   # Keep iio-sensor-proxy running even if it encounters uncalibrated
   # devices at boot (it can crash-loop before the ISH firmware is fully
