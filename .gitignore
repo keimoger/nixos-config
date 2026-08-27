@@ -1,0 +1,4 @@
+result
+result-*
+modules/firmware/*.bin
+.direnv/

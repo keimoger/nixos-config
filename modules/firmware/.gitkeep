@@ -1,0 +1,2 @@
+Put the extracted intel/ish/*.bin firmware blob here.
+See ../sensors.nix and ../../README.md for details.
