@@ -19,6 +19,7 @@
       claude-code
       pkgs.orca-slicer
       bitwarden-desktop
+      vscode
     ];
   };
 
