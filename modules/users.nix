@@ -18,6 +18,7 @@
       thunderbird
       claude-code
       pkgs.orca-slicer
+      bitwarden-desktop
     ];
   };
 
