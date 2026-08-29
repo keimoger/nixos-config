@@ -15,4 +15,17 @@ let
 in
 {
   environment.systemPackages = [ ploverPkg ];
+
+  # Autostart Plover on login, and have it start already minimized to
+  # the tray (needs the AppIndicator extension from modules/gnome.nix
+  # enabled once via the Extensions app — GNOME doesn't auto-enable
+  # extensions just because the package is installed).
+  environment.etc."xdg/autostart/plover.desktop".text = ''
+    [Desktop Entry]
+    Type=Application
+    Name=Plover
+    Exec=${ploverPkg}/bin/plover
+    X-GNOME-Autostart-enabled=true
+    NoDisplay=false
+  '';
 }

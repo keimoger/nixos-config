@@ -18,6 +18,16 @@
   services.desktopManager.gnome.enable = true;
   services.gnome.gnome-keyring.enable = true;
 
+  # Required for GNOME (and GTK apps generally) to store/read settings —
+  # without this, gnome-shell can fail to start almost entirely.
+  programs.dconf.enable = true;
+
+  # GNOME removed the classic system tray years ago. This restores it —
+  # not a "fake it" hack for a missing GNOME paradigm, but standard
+  # plumbing most third-party Linux apps (Plover included) still
+  # depend on to minimize/background themselves correctly.
+  environment.systemPackages = [ pkgs.gnomeExtensions.appindicator ];
+
   # Both Plasma and GNOME set their own default SSH "ask password"
   # helper (ksshaskpass vs seahorse's ssh-askpass) at the same
   # priority, which NixOS refuses to silently resolve. Pick one

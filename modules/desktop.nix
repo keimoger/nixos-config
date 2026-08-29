@@ -12,7 +12,7 @@
   # (a long-standing GNOME assumption, not NixOS-specific). GDM can
   # still list Plasma as a session choice, so nothing is lost.
   services.displayManager.gdm.enable = true;
-  services.displayManager.gdm.wayland = true;
+  #services.displayManager.gdm.wayland = true;
 
   services.desktopManager.plasma6.enable = true;
   services.displayManager.plasma-login-manager.enable = false;
@@ -38,8 +38,20 @@
     };
   };
 
+  # Arc 140V (Lunar Lake, Xe2) is already driven by the in-kernel `xe`
+  # driver + Mesa — nothing to swap there. What nixos-generate-config
+  # left out is the userspace acceleration stack: iHD is the VA-API
+  # backend that actually supports Xe2 (the older i965 backend doesn't),
+  # vpl-gpu-rt is oneVPL/Quick Sync, intel-compute-runtime is OpenCL.
   hardware.graphics = {
     enable = true;
     enable32Bit = true;
+    extraPackages = with pkgs; [
+      intel-media-driver
+      vpl-gpu-rt
+      intel-compute-runtime
+    ];
   };
+
+  environment.sessionVariables.LIBVA_DRIVER_NAME = "iHD";
 }
