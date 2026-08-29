@@ -4,13 +4,20 @@
     isNormalUser = true;
     description = "Kei Moger";
     shell = pkgs.nushell;
-    extraGroups = [ "networkmanager" "wheel" "input" "uinput" "dialout" ];
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+      "input"
+      "uinput"
+      "dialout"
+    ];
     packages = with pkgs; [
       telegram-desktop
       spotify
       google-chrome
       thunderbird
       claude-code
+      pkgs.orca-slicer
     ];
   };
 

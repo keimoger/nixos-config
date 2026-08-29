@@ -9,5 +9,7 @@
     sbctl
     git
     helix
+    nixd
+    nixfmt
   ];
 }
