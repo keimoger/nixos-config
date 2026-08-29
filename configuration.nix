@@ -19,6 +19,8 @@
     ./modules/users.nix
     ./modules/plover.nix
     ./modules/packages.nix
+    ./modules/vboard.nix
+    ./modules/gnome.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
