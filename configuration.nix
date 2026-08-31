@@ -21,6 +21,7 @@
     ./modules/packages.nix
     ./modules/vboard.nix
     ./modules/gnome.nix
+    ./modules/home-manager.nix
   ];
 
   nixpkgs.config.allowUnfree = true;
