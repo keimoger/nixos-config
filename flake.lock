@@ -143,6 +143,19 @@
         "url": "https://github.com/dnaq/plover-flake"
       }
     },
+    "plover-russian-firebird": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1788189433,
+        "narHash": "sha256-xwXvPTaHhv0aDkDSkUHFBUT8ZGa2P26vGuhcUlFdLj4=",
+        "path": "/home/keimoger/projects/plover-russian-firebird",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/keimoger/projects/plover-russian-firebird",
+        "type": "path"
+      }
+    },
     "plover-stroke": {
       "flake": false,
       "locked": {
@@ -217,7 +230,8 @@
       "inputs": {
         "lanzaboote": "lanzaboote",
         "nixpkgs": "nixpkgs",
-        "plover-flake": "plover-flake"
+        "plover-flake": "plover-flake",
+        "plover-russian-firebird": "plover-russian-firebird"
       }
     },
     "rtf-tokenize": {

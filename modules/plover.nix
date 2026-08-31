@@ -1,7 +1,23 @@
 { pkgs, inputs, ... }:
 let
   system = pkgs.stdenv.hostPlatform.system;
-  ploverPkg = inputs.plover-flake.packages.${system}.plover.withPlugins (plugins: [
+  basePlover = inputs.plover-flake.packages.${system}.plover;
+
+  # Not in the plover_plugins_registry (it's unpublished/local), so it can't
+  # come from `withPlugins`'s own plugin set like the others below — built
+  # here the same way plover-flake builds every registry plugin, just from
+  # the local `path:` input instead of a PyPI tarball. Picks up live edits
+  # on every rebuild since `path:` inputs aren't commit-locked.
+  plover-russian-firebird = pkgs.python3Packages.buildPythonPackage {
+    pname = "plover-russian-firebird";
+    version = "0.0.7";
+    src = inputs.plover-russian-firebird;
+    pyproject = true;
+    build-system = [ pkgs.python3Packages.setuptools ];
+    buildInputs = [ basePlover ];
+  };
+
+  ploverPkg = basePlover.withPlugins (plugins: [
     plugins.plover-lapwing-aio
     plugins.plover-python-dictionary
     plugins.plover-dict-commands
@@ -11,6 +27,7 @@ let
     plugins.plover-uinput
     # plugins.plover-tapey-tape
     # Add any specific plugin exposed by the flake
+    plover-russian-firebird
   ]);
 in
 {

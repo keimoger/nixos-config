@@ -4,6 +4,10 @@
   inputs = {
     nixpkgs.url = "git+https://github.com/NixOS/nixpkgs?ref=nixos-unstable";
     plover-flake.url = "git+https://github.com/dnaq/plover-flake";
+    plover-russian-firebird = {
+      url = "path:/home/keimoger/projects/plover-russian-firebird";
+      flake = false;
+    };
     lanzaboote = {
       url = "github:nix-community/lanzaboote/master"; # or latest stable tag/master
       inputs.nixpkgs.follows = "nixpkgs";

@@ -12,7 +12,6 @@
       "dialout"
     ];
     packages = with pkgs; [
-      telegram-desktop
       spotify
       google-chrome
       thunderbird

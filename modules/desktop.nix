@@ -54,4 +54,29 @@
   };
 
   environment.sessionVariables.LIBVA_DRIVER_NAME = "iHD";
+
+  # kscreenlocker keeps whatever keyboard layout was active when the
+  # screen locked. With ru+us configured (~/.config/kxkbrc LayoutList),
+  # landing on the lock screen in ru meant typing the password in the
+  # wrong layout whenever fingerprint auth didn't fire. KWin's
+  # org.kde.screensaver /ScreenSaver interface fires an AboutToLock
+  # signal just before the locker appears, so watch for it and force
+  # layout index 1 (us) via org.kde.keyboard. Index is positional in
+  # kxkbrc's LayoutList — update this if that list is ever reordered.
+  systemd.user.services.lockscreen-english-layout = {
+    description = "Force English keyboard layout when the screen locks";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStart = pkgs.writeShellScript "lockscreen-english-layout" ''
+        ${pkgs.dbus}/bin/dbus-monitor --profile "interface='org.kde.screensaver',member='AboutToLock'" |
+        while IFS=$'\t' read -r type ts serial sender dest path iface member; do
+          if [ "$member" = "AboutToLock" ]; then
+            ${pkgs.kdePackages.qttools}/bin/qdbus org.kde.keyboard /Layouts setLayout 1
+          fi
+        done
+      '';
+      Restart = "always";
+    };
+  };
 }

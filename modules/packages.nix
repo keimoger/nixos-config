@@ -21,9 +21,14 @@ in
 
   programs.nushell = {
     enable = true;
-    autoloads = [ atuinNuAutoload carapaceNuAutoload ];
+    autoloads = [
+      atuinNuAutoload
+      carapaceNuAutoload
+    ];
   };
   programs.atuin.enable = true;
+
+  powerManagement.powertop.enable = true;
 
   environment.systemPackages = with pkgs; [
     sbctl
