@@ -1,0 +1,113 @@
+--- a/src/evdev-mt-touchpad.h	2026-09-02 12:09:56.644102106 +0400
++++ b/src/evdev-mt-touchpad.h	2026-09-02 12:10:03.010064271 +0400
+@@ -560,6 +560,18 @@
+ 		struct evdev_device *tablet_device;
+ 		bool tablet_left_handed_state;
+ 	} left_handed;
++
++	/* Screen-orientation-driven rotation, independent of the
++	 * left_handed 180-degree flip above. Wires up the same generic
++	 * libinput_device_config_rotation interface evdev-fallback.c
++	 * uses for mice/trackballs -- touchpad dispatch never called
++	 * into that path, so libinput_device_config_rotation_is_available()
++	 * always returned 0 for touchpads. */
++	struct {
++		unsigned int angle;
++		struct matrix matrix;
++		struct libinput_device_config_rotation config;
++	} rotation;
+ };
+ 
+ static inline struct tp_dispatch *
+--- a/src/evdev-mt-touchpad.c	2026-09-02 12:09:56.650102071 +0400
++++ b/src/evdev-mt-touchpad.c	2026-09-02 12:10:39.831823923 +0400
+@@ -3966,6 +3966,53 @@
+ 		evdev_init_left_handed(device, tp_change_to_left_handed);
+ }
+ 
++static int
++tp_rotation_config_is_available(struct libinput_device *device)
++{
++	/* This function only gets called when we support rotation */
++	return 1;
++}
++
++static enum libinput_config_status
++tp_rotation_config_set_angle(struct libinput_device *libinput_device,
++			     unsigned int degrees_cw)
++{
++	struct evdev_device *device = evdev_device(libinput_device);
++	struct tp_dispatch *tp = (struct tp_dispatch *)device->dispatch;
++
++	tp->rotation.angle = degrees_cw;
++	matrix_init_rotate(&tp->rotation.matrix, degrees_cw);
++
++	return LIBINPUT_CONFIG_STATUS_SUCCESS;
++}
++
++static unsigned int
++tp_rotation_config_get_angle(struct libinput_device *libinput_device)
++{
++	struct evdev_device *device = evdev_device(libinput_device);
++	struct tp_dispatch *tp = (struct tp_dispatch *)device->dispatch;
++
++	return tp->rotation.angle;
++}
++
++static unsigned int
++tp_rotation_config_get_default_angle(struct libinput_device *device)
++{
++	return 0;
++}
++
++static void
++tp_init_rotation(struct tp_dispatch *tp, struct evdev_device *device)
++{
++	tp->rotation.config.is_available = tp_rotation_config_is_available;
++	tp->rotation.config.set_angle = tp_rotation_config_set_angle;
++	tp->rotation.config.get_angle = tp_rotation_config_get_angle;
++	tp->rotation.config.get_default_angle =
++		tp_rotation_config_get_default_angle;
++	matrix_init_identity(&tp->rotation.matrix);
++	device->base.config.rotation = &tp->rotation.config;
++}
++
+ struct evdev_dispatch *
+ evdev_mt_touchpad_create(struct evdev_device *device)
+ {
+@@ -3989,6 +4036,7 @@
+ 	tp->sendevents.config.get_default_mode = tp_sendevents_get_default_mode;
+ 
+ 	tp_init_left_handed(tp, device);
++	tp_init_rotation(tp, device);
+ 
+ 	return &tp->base;
+ }
+--- a/src/evdev-mt-touchpad-gestures.c	2026-09-02 12:09:56.654102048 +0400
++++ b/src/evdev-mt-touchpad-gestures.c	2026-09-02 12:10:48.602761621 +0400
+@@ -207,6 +207,17 @@
+ 	return !device_float_is_zero(raw);
+ }
+ 
++static inline struct device_float_coords
++tp_rotate_relative(struct tp_dispatch *tp, struct device_float_coords raw)
++{
++	if (!tp->device->base.config.rotation)
++		return raw;
++
++	matrix_mult_vec_double(&tp->rotation.matrix, &raw.x, &raw.y);
++
++	return raw;
++}
++
+ static void
+ tp_gesture_post_pointer_motion(struct tp_dispatch *tp, usec_t time)
+ {
+@@ -214,6 +225,7 @@
+ 	struct normalized_coords delta;
+ 
+ 	raw = tp_get_raw_pointer_motion(tp);
++	raw = tp_rotate_relative(tp, raw);
+ 	delta = tp_filter_motion(tp, &raw, time);
+ 
+ 	if (!normalized_is_zero(delta) || !device_float_is_zero(raw)) {

@@ -189,8 +189,8 @@
     "plover-russian-firebird": {
       "flake": false,
       "locked": {
-        "lastModified": 1788189433,
-        "narHash": "sha256-xwXvPTaHhv0aDkDSkUHFBUT8ZGa2P26vGuhcUlFdLj4=",
+        "lastModified": 1788219856,
+        "narHash": "sha256-T4te+TYUjSDx4CXm1c4QzHd1mkgWAZDxgkG/evYBvJo=",
         "path": "/home/keimoger/projects/plover-russian-firebird",
         "type": "path"
       },
