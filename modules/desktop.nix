@@ -1,42 +1,45 @@
 { pkgs, ... }:
 {
-  services.xserver.enable = true;
+  # Wayland-only: no X server. services.xserver.xkb is still the right
+  # place for keyboard layout config regardless — that option tree is
+  # a shared namespace NixOS reuses for Wayland compositors too, it
+  # doesn't imply Xorg actually runs. SDDM's own module asserts
+  # "requires either services.xserver.enable or
+  # services.displayManager.sddm.wayland.enable" — satisfied below by
+  # the latter, so xserver.enable can just be false outright rather
+  # than working around kwin-x11 package-by-package. XWayland (for
+  # individual X11 app compatibility inside the Wayland session) is
+  # unaffected — programs.xwayland.enable is set unconditionally by
+  # the plasma6 module, entirely independent of this.
   services.xserver.xkb = {
     layout = "us";
     variant = "";
     options = "ctrl:nocaps";
   };
 
-  # GNOME is the primary display manager now that GNOME is in play —
-  # it assumes GDM specifically for reliable screen lock/unlock
-  # (a long-standing GNOME assumption, not NixOS-specific). GDM can
-  # still list Plasma as a session choice, so nothing is lost.
-  services.displayManager.gdm.enable = true;
-  #services.displayManager.gdm.wayland = true;
+  # Back to SDDM. GDM was tried specifically for its screen lock/unlock
+  # reliability, but on NixOS GDM unconditionally pulls in gnome-shell
+  # + mutter + gnome-session for its own greeter (nixos/modules/
+  # services/display-managers/gdm.nix — "Otherwise GDM will not be
+  # able to start correctly and display Wayland sessions"), completely
+  # independent of whether services.desktopManager.gnome.enable is
+  # set. That's not something a config toggle can route around, and it
+  # meant the entire GNOME stack rebuilding alongside anything that
+  # touches a shared dependency (e.g. libinput). Full GNOME removal
+  # and GDM are mutually exclusive on NixOS — chose removal.
+  services.displayManager.sddm.enable = true;
+  services.displayManager.sddm.wayland.enable = true;
+  services.displayManager.sddm.wayland.compositor = "kwin";
 
   services.desktopManager.plasma6.enable = true;
   services.displayManager.plasma-login-manager.enable = false;
 
-  services.displayManager.sddm.enable = false;
-
-  # These SDDM/Plasma-specific autologin PAM/systemd bits are now dead
-  # config (harmless while unused, since sddm and the plasmalogin
-  # greeter aren't running) — safe to delete once you've confirmed GDM
-  # works for you.
-  systemd.services.plasmalogin.serviceConfig.KeyringMode = "inherit";
-
-  security.pam.services.plasmalogin-autologin.rules.auth = {
-    systemd_loadkey = {
-      order = 0;
-      control = "optional";
-      modulePath = "${pkgs.systemd}/lib/security/pam_systemd-loadkey.so";
-    };
-    plasmalogin = {
-      order = 1;
-      control = "include";
-      modulePath = "plasmalogin";
-    };
-  };
+  # kwin-x11 is a direct, unconditional environment.systemPackages
+  # entry from the plasma6 module itself (confirmed via nix why-depends
+  # — nixos-system.drv -> system-path.drv -> kwin-x11.drv, 2 hops,
+  # nothing transitively forcing it in). services.xserver.enable=false
+  # doesn't touch it; this is the only thing that does.
+  environment.plasma6.excludePackages = [ pkgs.kdePackages.kwin-x11 ];
 
   # Arc 140V (Lunar Lake, Xe2) is already driven by the in-kernel `xe`
   # driver + Mesa — nothing to swap there. What nixos-generate-config

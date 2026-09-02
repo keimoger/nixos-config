@@ -84,30 +84,24 @@
  	return &tp->base;
  }
 --- a/src/evdev-mt-touchpad-gestures.c	2026-09-02 12:09:56.654102048 +0400
-+++ b/src/evdev-mt-touchpad-gestures.c	2026-09-02 12:10:48.602761621 +0400
-@@ -207,6 +207,17 @@
- 	return !device_float_is_zero(raw);
++++ b/src/evdev-mt-touchpad-gestures.c	2026-09-02 18:11:38.483658222 +0400
+@@ -143,12 +143,18 @@
+ 		}
+ 	}
+ 
+-	if (!average || nactive == 0)
++	if (!average || nactive == 0) {
++		if (tp->device->base.config.rotation)
++			matrix_mult_vec_double(&tp->rotation.matrix, &delta.x, &delta.y);
+ 		return delta;
++	}
+ 
+ 	delta.x /= nactive;
+ 	delta.y /= nactive;
+ 
++	if (tp->device->base.config.rotation)
++		matrix_mult_vec_double(&tp->rotation.matrix, &delta.x, &delta.y);
++
+ 	return delta;
  }
  
-+static inline struct device_float_coords
-+tp_rotate_relative(struct tp_dispatch *tp, struct device_float_coords raw)
-+{
-+	if (!tp->device->base.config.rotation)
-+		return raw;
-+
-+	matrix_mult_vec_double(&tp->rotation.matrix, &raw.x, &raw.y);
-+
-+	return raw;
-+}
-+
- static void
- tp_gesture_post_pointer_motion(struct tp_dispatch *tp, usec_t time)
- {
-@@ -214,6 +225,7 @@
- 	struct normalized_coords delta;
- 
- 	raw = tp_get_raw_pointer_motion(tp);
-+	raw = tp_rotate_relative(tp, raw);
- 	delta = tp_filter_motion(tp, &raw, time);
- 
- 	if (!normalized_is_zero(delta) || !device_float_is_zero(raw)) {

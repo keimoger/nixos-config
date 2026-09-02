@@ -14,10 +14,20 @@
   fonts.fontconfig = {
     enable = true;
     defaultFonts = {
-      monospace = [ "JetBrainsMono Nerd Font" "DejaVu Sans Mono" ];
-      sansSerif = [ "Cantarell" "Noto Sans" ];
-      serif = [ "Noto Serif" "DejaVu Serif" ];
+      monospace = [
+        "JetBrainsMono Nerd Font"
+        "DejaVu Sans Mono"
+      ];
+      sansSerif = [
+        "Cantarell"
+        "Noto Sans"
+      ];
+      serif = [
+        "Noto Serif"
+        "DejaVu Serif"
+      ];
     };
+    subpixel.lcdfilter = "none";
   };
 
   environment.pathsToLink = [ "/share/icons" ];

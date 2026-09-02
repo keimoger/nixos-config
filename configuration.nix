@@ -20,8 +20,9 @@
     ./modules/plover.nix
     ./modules/packages.nix
     ./modules/vboard.nix
-    ./modules/gnome.nix
+    ./modules/keyring.nix
     ./modules/home-manager.nix
+    ./modules/libinput.nix
   ];
 
   nixpkgs.config.allowUnfree = true;

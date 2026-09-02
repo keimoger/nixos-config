@@ -11,7 +11,12 @@
 #
 # See the README in this repo for how to verify each link with dmesg /
 # monitor-sensor.
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 {
   boot.initrd.kernelModules = [
     "intel_ish_ipc"

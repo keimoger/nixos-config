@@ -38,6 +38,16 @@
         ];
         options = [ "caps:ctrl_modifier" ];
       };
+
+      # Media-key/slider volume step, KConfigXT-backed (verified via
+      # KDE/plasma-pa's globalconfig.kcfg: VolumeStep, [General],
+      # default 5) — a real setting, unlike the brightness step (see
+      # below), which is a hardcoded algorithm with no config hook at
+      # all. configFile is plasma-manager's generic [file][group][key]
+      # escape hatch for settings with no typed option of their own;
+      # it patches this one key in ~/.config/plasmaparc without
+      # touching the unrelated mic-mute settings already stored there.
+      configFile."plasmaparc"."General"."VolumeStep" = 1;
     };
 
     home.stateVersion = "26.05";

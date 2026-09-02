@@ -39,6 +39,22 @@ in
     ];
   };
   programs.atuin.enable = true;
+  # The NixOS module unconditionally points atuin at ATUIN_CONFIG_DIR=
+  # /etc/atuin (atuin only reads that or XDG_CONFIG_HOME, not
+  # XDG_CONFIG_DIRS), but only actually writes /etc/atuin/config.toml
+  # when settings is non-empty (nixos/modules/programs/atuin.nix:
+  # `lib.mkIf (cfg.settings != { })`). We never set .settings, so the
+  # file never existed — every atuin invocation was pointed at a
+  # config path with nothing there (`atuin status` errored outright:
+  # "failed to create file /etc/atuin/config.toml: No such file or
+  # directory"), and since daemon.enable also defaults to true on
+  # Linux, the daemon was very likely failing on the same missing file
+  # — together showing up as history search "partially" broken rather
+  # than a clean failure. fuzzy is also just a better default than
+  # atuin's own "prefix" for interactive Up-arrow search.
+  programs.atuin.settings = {
+    search_mode = "fuzzy";
+  };
 
   # VS Code extensions (and similar tools) sometimes bundle a prebuilt
   # dynamically-linked Linux binary that expects the standard FHS
