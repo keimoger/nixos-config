@@ -23,6 +23,7 @@
     ./modules/keyring.nix
     ./modules/home-manager.nix
     ./modules/libinput.nix
+    ./modules/rotation-lock.nix
   ];
 
   nixpkgs.config.allowUnfree = true;

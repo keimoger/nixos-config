@@ -1,26 +1,6 @@
---- a/src/evdev-mt-touchpad.h	2026-09-02 12:09:56.644102106 +0400
-+++ b/src/evdev-mt-touchpad.h	2026-09-02 12:10:03.010064271 +0400
-@@ -560,6 +560,18 @@
- 		struct evdev_device *tablet_device;
- 		bool tablet_left_handed_state;
- 	} left_handed;
-+
-+	/* Screen-orientation-driven rotation, independent of the
-+	 * left_handed 180-degree flip above. Wires up the same generic
-+	 * libinput_device_config_rotation interface evdev-fallback.c
-+	 * uses for mice/trackballs -- touchpad dispatch never called
-+	 * into that path, so libinput_device_config_rotation_is_available()
-+	 * always returned 0 for touchpads. */
-+	struct {
-+		unsigned int angle;
-+		struct matrix matrix;
-+		struct libinput_device_config_rotation config;
-+	} rotation;
- };
- 
- static inline struct tp_dispatch *
---- a/src/evdev-mt-touchpad.c	2026-09-02 12:09:56.650102071 +0400
-+++ b/src/evdev-mt-touchpad.c	2026-09-02 12:10:39.831823923 +0400
+diff -ru '--exclude=.git' pristine/src/evdev-mt-touchpad.c working/src/evdev-mt-touchpad.c
+--- pristine/src/evdev-mt-touchpad.c	2026-09-04 05:24:45.799296998 +0400
++++ working/src/evdev-mt-touchpad.c	2026-09-04 05:24:45.833412888 +0400
 @@ -3966,6 +3966,53 @@
  		evdev_init_left_handed(device, tp_change_to_left_handed);
  }
@@ -83,8 +63,85 @@
  
  	return &tp->base;
  }
---- a/src/evdev-mt-touchpad-gestures.c	2026-09-02 12:09:56.654102048 +0400
-+++ b/src/evdev-mt-touchpad-gestures.c	2026-09-02 18:11:38.483658222 +0400
+diff -ru '--exclude=.git' pristine/src/evdev-mt-touchpad-edge-scroll.c working/src/evdev-mt-touchpad-edge-scroll.c
+--- pristine/src/evdev-mt-touchpad-edge-scroll.c	2026-09-04 05:24:45.799296998 +0400
++++ working/src/evdev-mt-touchpad-edge-scroll.c	2026-09-04 05:26:03.886189403 +0400
+@@ -73,14 +73,45 @@
+ tp_touch_get_edge(const struct tp_dispatch *tp, const struct tp_touch *t)
+ {
+ 	uint32_t edge = EDGE_NONE;
++	bool right, bottom;
+ 
+ 	if (tp->scroll.method != LIBINPUT_CONFIG_SCROLL_EDGE)
+ 		return EDGE_NONE;
+ 
+-	if (t->point.x > tp->scroll.right_edge)
++	/* Edge-scroll zones are defined in raw, physical touchpad
++	 * coordinates and don't rotate on their own -- unlike pointer
++	 * motion (tp_get_touches_delta()), which the rotation patch
++	 * already handles. Without this, "right-edge scroll" would stay
++	 * pinned to the physical right edge regardless of the screen's
++	 * current orientation, making it useful only when the laptop is
++	 * held in its normal (0 degree) orientation. Remap which physical
++	 * edge plays the "logical right" (vertical scroll) and "logical
++	 * bottom" (horizontal scroll) role based on the same
++	 * tp->rotation.angle the motion path already uses, so the two
++	 * stay consistent with each other. */
++	switch (tp->rotation.angle) {
++	case 90:
++		right = t->point.y < tp->scroll.top_edge;
++		bottom = t->point.x > tp->scroll.right_edge;
++		break;
++	case 180:
++		right = t->point.x < tp->scroll.left_edge;
++		bottom = t->point.y < tp->scroll.top_edge;
++		break;
++	case 270:
++		right = t->point.y > tp->scroll.bottom_edge;
++		bottom = t->point.x < tp->scroll.left_edge;
++		break;
++	default:
++		right = t->point.x > tp->scroll.right_edge;
++		bottom = t->point.y > tp->scroll.bottom_edge;
++		break;
++	}
++
++	if (right)
+ 		edge |= EDGE_RIGHT;
+ 
+-	if (t->point.y > tp->scroll.bottom_edge)
++	if (bottom && tp->scroll.want_horiz_scroll)
+ 		edge |= EDGE_BOTTOM;
+ 
+ 	return edge;
+@@ -315,10 +346,20 @@
+ 	edges = evdev_device_mm_to_units(device, &mm);
+ 
+ 	tp->scroll.right_edge = edges.x;
+-	if (want_horiz_scroll)
+-		tp->scroll.bottom_edge = edges.y;
+-	else
+-		tp->scroll.bottom_edge = INT_MAX;
++	tp->scroll.bottom_edge = edges.y;
++
++	/* Mirror thresholds from the opposite corner, for the rotated
++	 * cases where "logical right"/"logical bottom" map onto the
++	 * physical left/top edges instead. Gating (previously baked into
++	 * bottom_edge via the INT_MAX sentinel above) is now applied at
++	 * the point of use in tp_touch_get_edge() instead, since which
++	 * physical edge needs gating depends on the current rotation. */
++	mm.x = 7;
++	mm.y = 7;
++	edges = evdev_device_mm_to_units(device, &mm);
++	tp->scroll.left_edge = edges.x;
++	tp->scroll.top_edge = edges.y;
++	tp->scroll.want_horiz_scroll = want_horiz_scroll;
+ 
+ 	i = 0;
+ 	tp_for_each_touch(tp, t) {
+diff -ru '--exclude=.git' pristine/src/evdev-mt-touchpad-gestures.c working/src/evdev-mt-touchpad-gestures.c
+--- pristine/src/evdev-mt-touchpad-gestures.c	2026-09-04 05:24:45.799296998 +0400
++++ working/src/evdev-mt-touchpad-gestures.c	2026-09-04 05:24:45.834059084 +0400
 @@ -143,12 +143,18 @@
  		}
  	}
@@ -105,3 +162,47 @@
  	return delta;
  }
  
+diff -ru '--exclude=.git' pristine/src/evdev-mt-touchpad.h working/src/evdev-mt-touchpad.h
+--- pristine/src/evdev-mt-touchpad.h	2026-09-04 05:24:45.799296998 +0400
++++ working/src/evdev-mt-touchpad.h	2026-09-04 05:25:46.479137965 +0400
+@@ -421,6 +421,21 @@
+ 		enum libinput_config_scroll_method method;
+ 		int32_t right_edge;  /* in device coordinates */
+ 		int32_t bottom_edge; /* in device coordinates */
++		/* Mirror thresholds for left_edge/top_edge, needed so the
++		 * edge-scroll zone can rotate along with screen-orientation
++		 * rotation (tp->rotation.angle) instead of staying pinned to
++		 * the physical right/bottom edges regardless of how the
++		 * touchpad is currently oriented. */
++		int32_t left_edge;   /* in device coordinates */
++		int32_t top_edge;    /* in device coordinates */
++		/* Whether this touchpad is tall enough for a horizontal
++		 * scroll zone at all -- used to gate whichever physical edge
++		 * is currently playing the "logical bottom" (horizontal
++		 * scroll) role, since that role moves between physical edges
++		 * as rotation.angle changes and can no longer be baked into
++		 * a single sentinel value the way upstream's bottom_edge=
++		 * INT_MAX trick did. */
++		bool want_horiz_scroll;
+ 		struct {
+ 			bool h, v;
+ 		} active;
+@@ -560,6 +575,18 @@
+ 		struct evdev_device *tablet_device;
+ 		bool tablet_left_handed_state;
+ 	} left_handed;
++
++	/* Screen-orientation-driven rotation, independent of the
++	 * left_handed 180-degree flip above. Wires up the same generic
++	 * libinput_device_config_rotation interface evdev-fallback.c
++	 * uses for mice/trackballs -- touchpad dispatch never called
++	 * into that path, so libinput_device_config_rotation_is_available()
++	 * always returned 0 for touchpads. */
++	struct {
++		unsigned int angle;
++		struct matrix matrix;
++		struct libinput_device_config_rotation config;
++	} rotation;
+ };
+ 
+ static inline struct tp_dispatch *

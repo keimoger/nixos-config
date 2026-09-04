@@ -91,6 +91,7 @@ in
   environment.systemPackages = with pkgs; [
     sbctl
     git
+    gh
     helix
     nixd
     nixfmt

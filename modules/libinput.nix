@@ -21,7 +21,61 @@
 # consumer from source when this overlay changes it though, regardless
 # of actual ABI compatibility — that's just how content-addressed
 # derivations work, not something this patch could avoid.
+#
+# v3: right-edge scroll rotates with the screen too now. Edge-scroll
+# zones (evdev-mt-touchpad-edge-scroll.c) are defined in raw physical
+# coordinates and don't go through tp_get_touches_delta() at all --
+# an entirely separate code path from the motion rotation above, so
+# "right-edge scroll" stayed pinned to the physical right edge
+# regardless of screen orientation until this. tp_touch_get_edge()
+# now remaps which physical edge plays the "logical right"/"logical
+# bottom" role based on tp->rotation.angle, derived by solving for
+# which physical direction the *inverse* of the existing rotation
+# matrix maps to logical right/bottom -- i.e. the same rotation
+# convention the motion path already uses, kept consistent rather
+# than reasoned about independently. The small-touchpad "no
+# horizontal scroll zone" gate (upstream: bottom_edge=INT_MAX at init)
+# had to move from a baked-in sentinel to an explicit check at point
+# of use, since which physical edge needs gating now depends on the
+# current angle rather than being fixed.
 { pkgs, ... }:
+let
+  # Manual, on-demand haptic buzz -- independent of any actual click.
+  # Reverse-engineered from HP's own Windows driver (SynDeviceBridge_
+  # inhouse.dll / SynTPEnhService.exe, decompiled with Ghidra): the
+  # exported SDB_HapticControl(intensity, 1) triggers a pulse at
+  # `intensity` on Report 45 (0x2D) of this exact touchpad, not the
+  # passive Report 55 (0x37) Intensity-only control used for click
+  # feedback above -- setting Report 55 alone never produced a felt
+  # pulse (confirmed live), because it just scales the firmware's own
+  # autonomous click-force pulse rather than triggering one.
+  #
+  # Buffer layout (confirmed live, all four values felt distinctly):
+  # [0x2D, 0xFE, 0x01, intensity, 0x01, 0x01]. The 0xFE/0x01 pair and
+  # trailing 0x01 aren't arbitrary -- they're copied verbatim from a
+  # 5-byte scratch buffer the driver builds internally before relaying
+  # it into the real HidD_SetFeature buffer; dropping them (an early,
+  # wrong guess) silently no-op'd instead of erroring. Only 25/50/75/
+  # 100 are used anywhere in the driver's own call sites, so that's
+  # all this exposes -- untested whether other values work, and no
+  # reason to guess further given real ones are already known-good.
+  touchpadBuzz = pkgs.writeShellScriptBin "touchpad-buzz" ''
+    set -e
+    intensity="''${1:-100}"
+    case "$intensity" in
+      25) hex=19 ;;
+      50) hex=32 ;;
+      75) hex=4b ;;
+      100) hex=64 ;;
+      *)
+        echo "usage: touchpad-buzz [25|50|75|100]" >&2
+        exit 1
+        ;;
+    esac
+    exec ${pkgs.hidapitester}/bin/hidapitester --vidpid 06CB:CFD2 -l 6 --open \
+      --send-feature "0x2d,0xfe,0x01,0x$hex,0x01,0x01" -q
+  '';
+in
 {
   nix.settings.max-jobs = 1;
   nixpkgs.overlays = [
@@ -31,7 +85,11 @@
       });
     })
   ];
-  environment.systemPackages = [ pkgs.libinput ];
+  environment.systemPackages = [
+    pkgs.libinput
+    pkgs.hidapitester
+    touchpadBuzz
+  ];
 
   # Auto-rotate the touchpad with the screen, using the rotation
   # capability the patch above unlocked. KWin already exposes it live
@@ -106,4 +164,40 @@
       Restart = "always";
     };
   };
+
+  # Haptic click-force intensity for the same touchpad. Its HID report
+  # descriptor exposes a standard HID Haptics usage page (0x0e) "Simple
+  # Haptic Controller" with a single "Intensity" Feature report (Report
+  # ID 55/0x37, 1 byte, 0-100) -- confirmed via `hid-decode` on
+  # /sys/bus/hid/devices/0018:06CB:CFD2.0008/report_descriptor. No
+  # Waveform/Trigger/Duration usages are present alongside it, so this
+  # is scoped to scaling the force of the existing click-detection
+  # pulse, not a freely-triggerable vibration motor -- confirmed live,
+  # setting it to 0 didn't stop clicks from registering, just silenced
+  # the haptic feedback that normally accompanies one.
+  #
+  # Linux's in-kernel hid-haptic framework (CONFIG_HID_HAPTIC=y on this
+  # kernel) doesn't register an evdev/FF device for this touchpad
+  # despite the descriptor being present -- exactly why is unconfirmed,
+  # but the Feature report is directly settable over hidraw regardless,
+  # via the standard HIDIOCSFEATURE ioctl (this is what hidapitester
+  # wraps below). Confirmed live: 0 = no click feedback, 100 = max.
+  #
+  # The release-click pulse is weaker than the press-click pulse by
+  # hardware/firmware design -- at 15 the press was still felt but
+  # release silently dropped below its perceptible threshold (looked
+  # like a regression at first, wasn't one; confirmed by temporarily
+  # raising back to 100, which restored release feedback, then
+  # settling on 25 as the floor -- matches the minimum HP's own
+  # Windows driver allows, so presumably it's the vendor's own tested
+  # floor for keeping both press and release perceptible).
+  #
+  # A udev rule (rather than a systemd boot-target service, like
+  # touchpad-autorotate above) because this is an I2C-HID device that
+  # can rebind independent of the display/graphical session -- e.g.
+  # after suspend/resume -- and udev fires on every such (re)bind, not
+  # just once at boot.
+  services.udev.extraRules = ''
+    SUBSYSTEM=="hidraw", ENV{HID_ID}=="0018:000006CB:0000CFD2", RUN+="${pkgs.hidapitester}/bin/hidapitester --vidpid 06CB:CFD2 -l 2 --open --send-feature 0x37,25"
+  '';
 }
