@@ -3,7 +3,10 @@
 
   inputs = {
     nixpkgs.url = "git+https://github.com/NixOS/nixpkgs?ref=nixos-unstable";
-    plover-flake.url = "git+https://github.com/dnaq/plover-flake";
+    plover-flake = {
+      url = "git+https://github.com/dnaq/plover-flake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     plover-russian-firebird = {
       url = "path:/home/keimoger/projects/plover-russian-firebird";
       flake = false;
@@ -23,15 +26,24 @@
     };
   };
 
-  outputs = { self, nixpkgs, plover-flake, lanzaboote, home-manager, ... }@inputs: {
-    nixosConfigurations.nixos = nixpkgs.lib.nixosSystem {
-      system = "x86_64-linux"; # Or your system architecture
-      specialArgs = { inherit inputs; };
-      modules = [
-        lanzaboote.nixosModules.lanzaboote
-        home-manager.nixosModules.home-manager
-        ./configuration.nix
-      ];
+  outputs =
+    {
+      self,
+      nixpkgs,
+      plover-flake,
+      lanzaboote,
+      home-manager,
+      ...
+    }@inputs:
+    {
+      nixosConfigurations.keibook = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux"; # Or your system architecture
+        specialArgs = { inherit inputs; };
+        modules = [
+          lanzaboote.nixosModules.lanzaboote
+          home-manager.nixosModules.home-manager
+          ./configuration.nix
+        ];
+      };
     };
-  };
 }

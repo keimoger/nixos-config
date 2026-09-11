@@ -1,0 +1,76 @@
+diff -ru '--exclude=.git' pristine/kdecoration/breezedecoration.cpp working/kdecoration/breezedecoration.cpp
+--- pristine/kdecoration/breezedecoration.cpp	2026-09-08 06:13:52.754557018 +0400
++++ working/kdecoration/breezedecoration.cpp	2026-09-08 06:14:17.163632908 +0400
+@@ -209,6 +209,29 @@
+                  this,
+                  SLOT(reconfigure()));
+ 
++    dbus.connect(QStringLiteral("org.kde.KWin"),
++                 QStringLiteral("/org/kde/KWin"),
++                 QStringLiteral("org.kde.KWin.TabletModeManager"),
++                 QStringLiteral("tabletModeChanged"),
++                 this,
++                 SLOT(onTabletModeChanged(bool)));
++
++    {
++        auto message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
++                                                        QStringLiteral("/org/kde/KWin"),
++                                                        QStringLiteral("org.freedesktop.DBus.Properties"),
++                                                        QStringLiteral("Get"));
++        message.setArguments({QStringLiteral("org.kde.KWin.TabletModeManager"), QStringLiteral("tabletMode")});
++        auto call = new QDBusPendingCallWatcher(dbus.asyncCall(message), this);
++        connect(call, &QDBusPendingCallWatcher::finished, this, [this, call]() {
++            QDBusPendingReply<QVariant> reply = *call;
++            if (!reply.isError()) {
++                onTabletModeChanged(reply.value().toBool());
++            }
++            call->deleteLater();
++        });
++    }
++
+     reconfigure();
+     updateTitleBar();
+     auto s = settings();
+@@ -684,9 +707,20 @@
+ }
+ 
+ //________________________________________________________________
++void Decoration::onTabletModeChanged(bool mode)
++{
++    if (m_tabletMode == mode) {
++        return;
++    }
++    m_tabletMode = mode;
++    recalculateBorders();
++    updateButtonsGeometry();
++}
++
++//________________________________________________________________
+ int Decoration::buttonSize() const
+ {
+-    const int baseSize = settings()->gridUnit();
++    const int baseSize = m_tabletMode ? settings()->gridUnit() * 2 : settings()->gridUnit();
+     switch (m_internalSettings->buttonSize()) {
+     case InternalSettings::ButtonTiny:
+         return baseSize;
+diff -ru '--exclude=.git' pristine/kdecoration/breezedecoration.h working/kdecoration/breezedecoration.h
+--- pristine/kdecoration/breezedecoration.h	2026-09-08 06:13:52.759557033 +0400
++++ working/kdecoration/breezedecoration.h	2026-09-08 06:14:28.413668540 +0400
+@@ -95,6 +95,7 @@
+     void updateTitleBar();
+     void updateAnimationState();
+     void updateScale();
++    void onTabletModeChanged(bool mode);
+ 
+ private:
+     //* return the rect in which caption will be drawn
+@@ -131,6 +132,9 @@
+ 
+     //*frame corner radius, scaled according to DPI
+     qreal m_scaledCornerRadius = 3;
++
++    //* whether KWin currently reports tablet mode active
++    bool m_tabletMode = false;
+ };
+ 
+ bool Decoration::hasBorders() const

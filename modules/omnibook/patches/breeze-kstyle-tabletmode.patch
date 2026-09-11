@@ -1,0 +1,663 @@
+diff -ru '--exclude=.git' pristine/kstyle/breezemetrics.h working/kstyle/breezemetrics.h
+--- pristine/kstyle/breezemetrics.h	2026-09-08 06:18:05.488424922 +0400
++++ working/kstyle/breezemetrics.h	2026-09-08 06:18:50.017593643 +0400
+@@ -31,6 +31,22 @@
+     static constexpr int NoPen = 0;
+ };
+ 
++//* which metrics have a distinct tablet-mode variant, for Style::formFactorMetric()
++enum MetricsType {
++    Menu_FrameWidth,
++    MenuItem_MarginHeight,
++    LineEdit_FrameWidth,
++    ComboBox_FrameWidth,
++    SpinBox_FrameWidth,
++    CheckBox_Size,
++    Button_MarginWidth,
++    ToolButton_MarginWidth,
++    Slider_GrooveThickness,
++    Slider_ControlThickness,
++    TabBar_TabMarginHeight,
++    TabBar_TabMarginWidth
++};
++
+ //* metrics
+ struct Metrics {
+     // general
+@@ -48,23 +64,31 @@
+ 
+     // line editors
+     static constexpr int LineEdit_FrameWidth = 6;
++    static constexpr int LineEdit_FrameWidth_Tablet = 10;
+ 
+     // menu items
+     static constexpr int Menu_FrameWidth = 0;
++    static constexpr int Menu_FrameWidth_Tablet = 4;
+     static constexpr int MenuItem_MarginWidth = 4;
+     static constexpr int MenuItem_HighlightGap = 4;
+     static constexpr int MenuItem_ExtraLeftMargin = 4;
+     static constexpr int MenuItem_MarginHeight = 4;
++    // base value here (4) differs from the value (3) this was ported
++    // from historically -- kept the same ~2x ratio rather than the
++    // stale historical absolute number (6)
++    static constexpr int MenuItem_MarginHeight_Tablet = 8;
+     static constexpr int MenuItem_ItemSpacing = 2;
+     static constexpr int MenuItem_AcceleratorSpace = 16;
+     static constexpr int MenuItem_TextLeftMargin = 8;
+ 
+     // combobox
+     static constexpr int ComboBox_FrameWidth = 6;
++    static constexpr int ComboBox_FrameWidth_Tablet = 10;
+     static constexpr int ComboBox_ItemMarginWidth = 3;
+ 
+     // spinbox
+     static constexpr int SpinBox_FrameWidth = LineEdit_FrameWidth;
++    static constexpr int SpinBox_FrameWidth_Tablet = LineEdit_FrameWidth_Tablet;
+     static constexpr int SpinBox_ArrowButtonWidth = 20;
+ 
+     // groupbox title margin
+@@ -73,10 +97,12 @@
+     // buttons
+     static constexpr int Button_MinWidth = 80;
+     static constexpr int Button_MarginWidth = 6;
++    static constexpr int Button_MarginWidth_Tablet = 10;
+     static constexpr int Button_ItemSpacing = 4;
+ 
+     // tool buttons
+     static constexpr int ToolButton_MarginWidth = 6;
++    static constexpr int ToolButton_MarginWidth_Tablet = 10;
+     static constexpr int ToolButton_ItemSpacing = 4;
+     static constexpr int ToolButton_InlineIndicatorWidth = 12;
+ 
+@@ -85,6 +111,7 @@
+ 
+     // checkboxes and radio buttons
+     static constexpr int CheckBox_Size = 20;
++    static constexpr int CheckBox_Size_Tablet = 24;
+     static constexpr int CheckBox_FocusMarginWidth = 2;
+     static constexpr int CheckBox_ItemSpacing = 4;
+     static constexpr int CheckBox_Radius = Frame_FrameRadius - 1;
+@@ -123,11 +150,15 @@
+     static constexpr int Slider_TickLength = 8;
+     static constexpr int Slider_TickMarginWidth = 2;
+     static constexpr int Slider_GrooveThickness = 6;
++    static constexpr int Slider_GrooveThickness_Tablet = 8;
+     static constexpr int Slider_ControlThickness = 20;
++    static constexpr int Slider_ControlThickness_Tablet = 24;
+ 
+     // tabbar
+     static constexpr int TabBar_TabMarginHeight = 4;
++    static constexpr int TabBar_TabMarginHeight_Tablet = 10;
+     static constexpr int TabBar_TabMarginWidth = 8;
++    static constexpr int TabBar_TabMarginWidth_Tablet = 12;
+     static constexpr int TabBar_TabMinWidth = 80;
+     static constexpr int TabBar_TabMinHeight = 30;
+     static constexpr int TabBar_StaticTabMinHeight = 34;
+diff -ru '--exclude=.git' pristine/kstyle/breezestyle.cpp working/kstyle/breezestyle.cpp
+--- pristine/kstyle/breezestyle.cpp	2026-09-08 06:18:05.478424885 +0400
++++ working/kstyle/breezestyle.cpp	2026-09-08 06:23:59.301744580 +0400
+@@ -61,6 +61,9 @@
+ 
+ #if HAVE_QTDBUS
+ #include <QDBusConnection>
++#include <QDBusMessage>
++#include <QDBusPendingCallWatcher>
++#include <QDBusPendingReply>
+ #endif
+ 
+ #include "breeze_logging.h"
+@@ -297,6 +300,29 @@
+                  SLOT(configurationChanged()));
+ 
+     dbus.connect(QString(), QStringLiteral("/KWin"), QStringLiteral("org.kde.KWin"), QStringLiteral("reloadConfig"), this, SLOT(configurationChanged()));
++
++    dbus.connect(QStringLiteral("org.kde.KWin"),
++                 QStringLiteral("/org/kde/KWin"),
++                 QStringLiteral("org.kde.KWin.TabletModeManager"),
++                 QStringLiteral("tabletModeChanged"),
++                 this,
++                 SLOT(onTabletModeChanged(bool)));
++
++    {
++        auto message = QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"),
++                                                        QStringLiteral("/org/kde/KWin"),
++                                                        QStringLiteral("org.freedesktop.DBus.Properties"),
++                                                        QStringLiteral("Get"));
++        message.setArguments({QStringLiteral("org.kde.KWin.TabletModeManager"), QStringLiteral("tabletMode")});
++        auto call = new QDBusPendingCallWatcher(dbus.asyncCall(message), this);
++        connect(call, &QDBusPendingCallWatcher::finished, this, [this, call]() {
++            QDBusPendingReply<QVariant> reply = *call;
++            if (!reply.isError()) {
++                onTabletModeChanged(reply.value().toBool());
++            }
++            call->deleteLater();
++        });
++    }
+ #endif
+ 
+ #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+@@ -642,6 +668,60 @@
+ }
+ 
+ //______________________________________________________________
++void Style::onTabletModeChanged(bool mode)
++{
++    if (_tabletMode == mode) {
++        return;
++    }
++    _tabletMode = mode;
++
++    // force every widget using this style to re-query its metrics and repaint,
++    // since nothing else would otherwise prompt them to notice the change
++    const QWidgetList all = qApp->allWidgets();
++    for (QWidgetList::ConstIterator it = all.constBegin(), cend = all.constEnd(); it != cend; ++it) {
++        QWidget *w = *it;
++        if (w->windowType() != Qt::Desktop && !w->testAttribute(Qt::WA_SetStyle)) {
++            QEvent e(QEvent::StyleChange);
++            QCoreApplication::sendEvent(w, &e);
++            w->update();
++        }
++    }
++}
++
++//______________________________________________________________
++int Style::formFactorMetric(MetricsType type) const
++{
++    switch (type) {
++    case Menu_FrameWidth:
++        return isTabletMode() ? Metrics::Menu_FrameWidth_Tablet : Metrics::Menu_FrameWidth;
++    case MenuItem_MarginHeight:
++        return isTabletMode() ? Metrics::MenuItem_MarginHeight_Tablet : Metrics::MenuItem_MarginHeight;
++    case LineEdit_FrameWidth:
++        return isTabletMode() ? Metrics::LineEdit_FrameWidth_Tablet : Metrics::LineEdit_FrameWidth;
++    case ComboBox_FrameWidth:
++        return isTabletMode() ? Metrics::ComboBox_FrameWidth_Tablet : Metrics::ComboBox_FrameWidth;
++    case SpinBox_FrameWidth:
++        return isTabletMode() ? Metrics::SpinBox_FrameWidth_Tablet : Metrics::SpinBox_FrameWidth;
++    case CheckBox_Size:
++        return isTabletMode() ? Metrics::CheckBox_Size_Tablet : Metrics::CheckBox_Size;
++    case Button_MarginWidth:
++        return isTabletMode() ? Metrics::Button_MarginWidth_Tablet : Metrics::Button_MarginWidth;
++    case ToolButton_MarginWidth:
++        return isTabletMode() ? Metrics::ToolButton_MarginWidth_Tablet : Metrics::ToolButton_MarginWidth;
++    case Slider_GrooveThickness:
++        return isTabletMode() ? Metrics::Slider_GrooveThickness_Tablet : Metrics::Slider_GrooveThickness;
++    case Slider_ControlThickness:
++        return isTabletMode() ? Metrics::Slider_ControlThickness_Tablet : Metrics::Slider_ControlThickness;
++    case TabBar_TabMarginHeight:
++        return isTabletMode() ? Metrics::TabBar_TabMarginHeight_Tablet : Metrics::TabBar_TabMarginHeight;
++    case TabBar_TabMarginWidth:
++        return isTabletMode() ? Metrics::TabBar_TabMarginWidth_Tablet : Metrics::TabBar_TabMarginWidth;
++    default:
++        return 0;
++    }
++}
++
++//______________________________________________________________
+ int Style::pixelMetric(PixelMetric metric, const QStyleOption *option, const QWidget *widget) const
+ {
+     // handle special cases
+@@ -662,17 +742,17 @@
+             return 0;
+         }
+         if (qobject_cast<const QMenu *>(widget)) {
+-            return Metrics::Menu_FrameWidth;
++            return formFactorMetric(MetricsType::Menu_FrameWidth);
+         }
+         if (qobject_cast<const QLineEdit *>(widget)) {
+-            return Metrics::LineEdit_FrameWidth;
++            return formFactorMetric(MetricsType::LineEdit_FrameWidth);
+         } else if (isControl) {
+             const QString &elementType = option->styleObject->property("elementType").toString();
+             if (elementType == QLatin1String("edit") || elementType == QLatin1String("spinbox")) {
+-                return Metrics::LineEdit_FrameWidth;
++                return formFactorMetric(MetricsType::LineEdit_FrameWidth);
+ 
+             } else if (elementType == QLatin1String("combobox")) {
+-                return Metrics::ComboBox_FrameWidth;
++                return formFactorMetric(MetricsType::ComboBox_FrameWidth);
+             }
+ 
+             return Metrics::Frame_FrameWidth;
+@@ -724,11 +804,11 @@
+ 
+     case PM_ComboBoxFrameWidth: {
+         const auto comboBoxOption(qstyleoption_cast<const QStyleOptionComboBox *>(option));
+-        return comboBoxOption && comboBoxOption->editable ? Metrics::LineEdit_FrameWidth : Metrics::ComboBox_FrameWidth;
++        return comboBoxOption && comboBoxOption->editable ? formFactorMetric(MetricsType::LineEdit_FrameWidth) : formFactorMetric(MetricsType::ComboBox_FrameWidth);
+     }
+ 
+     case PM_SpinBoxFrameWidth:
+-        return Metrics::SpinBox_FrameWidth;
++        return formFactorMetric(MetricsType::SpinBox_FrameWidth);
+     case PM_ToolBarFrameWidth:
+         return Metrics::ToolBar_FrameWidth;
+     case PM_ToolTipLabelFrameWidth:
+@@ -767,9 +847,9 @@
+     case PM_ButtonMargin: {
+         // needs special case for kcalc buttons, to prevent the application to set too small margins
+         if (widget && widget->inherits("KCalcButton")) {
+-            return Metrics::Button_MarginWidth + 4;
++            return formFactorMetric(MetricsType::Button_MarginWidth) + 4;
+         } else {
+-            return Metrics::Button_MarginWidth;
++            return formFactorMetric(MetricsType::Button_MarginWidth);
+         }
+     }
+ 
+@@ -802,7 +882,7 @@
+     case PM_ToolBarSeparatorExtent:
+         return Metrics::ToolBar_SeparatorWidth;
+     case PM_ToolBarExtensionExtent:
+-        return pixelMetric(PM_SmallIconSize, option, widget) + 2 * Metrics::ToolButton_MarginWidth;
++        return pixelMetric(PM_SmallIconSize, option, widget) + 2 * formFactorMetric(MetricsType::ToolButton_MarginWidth);
+ 
+     case PM_ToolBarItemMargin:
+         return Metrics::ToolBar_ItemMargin;
+@@ -819,9 +899,9 @@
+     case PM_TabBarBaseOverlap:
+         return Metrics::TabBar_BaseOverlap;
+     case PM_TabBarTabHSpace:
+-        return 2 * Metrics::TabBar_TabMarginWidth;
++        return 2 * formFactorMetric(MetricsType::TabBar_TabMarginWidth);
+     case PM_TabBarTabVSpace:
+-        return 2 * Metrics::TabBar_TabMarginHeight;
++        return 2 * formFactorMetric(MetricsType::TabBar_TabMarginHeight);
+     case PM_TabCloseIndicatorWidth:
+     case PM_TabCloseIndicatorHeight:
+         return pixelMetric(PM_SmallIconSize, option, widget);
+@@ -838,18 +918,18 @@
+ 
+     // sliders
+     case PM_SliderThickness:
+-        return Metrics::Slider_ControlThickness;
++        return formFactorMetric(MetricsType::Slider_ControlThickness);
+     case PM_SliderControlThickness:
+-        return Metrics::Slider_ControlThickness;
++        return formFactorMetric(MetricsType::Slider_ControlThickness);
+     case PM_SliderLength:
+-        return Metrics::Slider_ControlThickness;
++        return formFactorMetric(MetricsType::Slider_ControlThickness);
+ 
+     // checkboxes and radio buttons
+     case PM_IndicatorWidth:
+     case PM_IndicatorHeight:
+     case PM_ExclusiveIndicatorWidth:
+     case PM_ExclusiveIndicatorHeight:
+-        return Metrics::CheckBox_Size;
++        return formFactorMetric(MetricsType::CheckBox_Size);
+ 
+     case PM_CheckBoxLabelSpacing:
+     case PM_RadioButtonLabelSpacing:
+@@ -868,7 +948,7 @@
+     case PM_DockWidgetTitleMargin:
+         return Metrics::Frame_FrameWidth;
+     case PM_DockWidgetTitleBarButtonMargin:
+-        return Metrics::ToolButton_MarginWidth;
++        return formFactorMetric(MetricsType::ToolButton_MarginWidth);
+ 
+     case PM_SplitterWidth:
+         return Metrics::Splitter_SplitterWidth;
+@@ -1991,7 +2071,7 @@
+         drawControl(QStyle::CE_PushButton, &option, &painter, button);
+ 
+         // offset
+-        const int margin(Metrics::Button_MarginWidth + Metrics::Frame_FrameWidth);
++        const int margin(formFactorMetric(MetricsType::Button_MarginWidth) + Metrics::Frame_FrameWidth);
+         QPoint offset(margin, margin);
+ 
+         // state
+@@ -2208,7 +2288,7 @@
+ //___________________________________________________________________________________________________________________
+ QRect Style::checkBoxContentsRect(const QStyleOption *option, const QWidget *) const
+ {
+-    return visualRect(option, option->rect.adjusted(Metrics::CheckBox_Size + Metrics::CheckBox_ItemSpacing, 0, 0, 0));
++    return visualRect(option, option->rect.adjusted(formFactorMetric(MetricsType::CheckBox_Size) + Metrics::CheckBox_ItemSpacing, 0, 0, 0));
+ }
+ 
+ //___________________________________________________________________________________________________________________
+@@ -2455,7 +2535,7 @@
+ 
+     case QTabBar::RoundedSouth:
+     case QTabBar::TriangularSouth:
+-        buttonRect.moveLeft(rect.left() + Metrics::TabBar_TabMarginWidth);
++        buttonRect.moveLeft(rect.left() + formFactorMetric(MetricsType::TabBar_TabMarginWidth));
+         buttonRect.moveTop((rect.height() - buttonRect.height()) / 2);
+         buttonRect = visualRect(option, buttonRect);
+         break;
+@@ -2499,20 +2579,20 @@
+ 
+     case QTabBar::RoundedSouth:
+     case QTabBar::TriangularSouth:
+-        buttonRect.moveRight(rect.right() - Metrics::TabBar_TabMarginWidth);
++        buttonRect.moveRight(rect.right() - formFactorMetric(MetricsType::TabBar_TabMarginWidth));
+         buttonRect.moveTop((rect.height() - buttonRect.height()) / 2);
+         buttonRect = visualRect(option, buttonRect);
+         break;
+ 
+     case QTabBar::RoundedWest:
+     case QTabBar::TriangularWest:
+-        buttonRect.moveTop(rect.top() + Metrics::TabBar_TabMarginWidth);
++        buttonRect.moveTop(rect.top() + formFactorMetric(MetricsType::TabBar_TabMarginWidth));
+         buttonRect.moveLeft((rect.width() - buttonRect.width()) / 2);
+         break;
+ 
+     case QTabBar::RoundedEast:
+     case QTabBar::TriangularEast:
+-        buttonRect.moveBottom(rect.bottom() - Metrics::TabBar_TabMarginWidth);
++        buttonRect.moveBottom(rect.bottom() - formFactorMetric(MetricsType::TabBar_TabMarginWidth));
+         buttonRect.moveLeft((rect.width() - buttonRect.width()) / 2);
+         break;
+ 
+@@ -2817,7 +2897,7 @@
+             titleHeight = groupBoxOption->fontMetrics.height();
+         }
+         if (checkable) {
+-            titleHeight = qMax(titleHeight, int(Metrics::CheckBox_Size));
++            titleHeight = qMax(titleHeight, int(formFactorMetric(MetricsType::CheckBox_Size)));
+         }
+ 
+         // add margin
+@@ -2860,8 +2940,8 @@
+         }
+ 
+         if (checkable) {
+-            titleHeight = qMax(titleHeight, int(Metrics::CheckBox_Size));
+-            titleWidth += Metrics::CheckBox_Size;
++            titleHeight = qMax(titleHeight, int(formFactorMetric(MetricsType::CheckBox_Size)));
++            titleWidth += formFactorMetric(MetricsType::CheckBox_Size);
+             if (!emptyText) {
+                 titleWidth += Metrics::CheckBox_ItemSpacing;
+             }
+@@ -2877,10 +2957,10 @@
+ 
+         if (subControl == SC_GroupBoxCheckBox) {
+             // vertical centering
+-            titleRect = centerRect(titleRect, titleWidth, Metrics::CheckBox_Size);
++            titleRect = centerRect(titleRect, titleWidth, formFactorMetric(MetricsType::CheckBox_Size));
+ 
+             // horizontal positioning
+-            const QRect subRect(titleRect.topLeft(), QSize(Metrics::CheckBox_Size, titleRect.height()));
++            const QRect subRect(titleRect.topLeft(), QSize(formFactorMetric(MetricsType::CheckBox_Size), titleRect.height()));
+             return visualRect(option->direction, titleRect, subRect);
+ 
+         } else {
+@@ -2891,7 +2971,7 @@
+             // horizontal positioning
+             auto subRect(titleRect);
+             if (checkable) {
+-                subRect.adjust(Metrics::CheckBox_Size + Metrics::CheckBox_ItemSpacing, 0, 0, 0);
++                subRect.adjust(formFactorMetric(MetricsType::CheckBox_Size) + Metrics::CheckBox_ItemSpacing, 0, 0, 0);
+             }
+             return visualRect(option->direction, titleRect, subRect);
+         }
+@@ -3213,20 +3293,20 @@
+ 
+     switch (subControl) {
+     case QStyle::SC_DialGroove:
+-        return insideMargin(rect, (Metrics::Slider_ControlThickness - Metrics::Slider_GrooveThickness) / 2);
++        return insideMargin(rect, (formFactorMetric(MetricsType::Slider_ControlThickness) - formFactorMetric(MetricsType::Slider_GrooveThickness)) / 2);
+     case QStyle::SC_DialHandle: {
+         // calculate angle at which handle needs to be drawn
+         const qreal angle(dialAngle(sliderOption, sliderOption->sliderPosition));
+ 
+         // groove rect
+-        const QRectF grooveRect(insideMargin(rect, Metrics::Slider_ControlThickness / 2));
++        const QRectF grooveRect(insideMargin(rect, formFactorMetric(MetricsType::Slider_ControlThickness) / 2));
+         qreal radius(grooveRect.width() / 2);
+ 
+         // slider center
+         QPointF center(grooveRect.center() + QPointF(radius * std::cos(angle), -radius * std::sin(angle)));
+ 
+         // slider rect
+-        QRect handleRect(0, 0, Metrics::Slider_ControlThickness, Metrics::Slider_ControlThickness);
++        QRect handleRect(0, 0, formFactorMetric(MetricsType::Slider_ControlThickness), formFactorMetric(MetricsType::Slider_ControlThickness));
+         handleRect.moveCenter(center.toPoint());
+         return handleRect;
+     }
+@@ -3254,8 +3334,9 @@
+ 
+     switch (subControl) {
+     case SC_SliderHandle: {
+-        QRect ret(centerRect(rect, Metrics::Slider_ControlThickness, Metrics::Slider_ControlThickness));
+-        constexpr int len = Metrics::Slider_ControlThickness;
++        const int controlThickness = formFactorMetric(MetricsType::Slider_ControlThickness);
++        QRect ret(centerRect(rect, controlThickness, controlThickness));
++        const int len = controlThickness;
+         const int sliderPos = sliderPositionFromValue(sliderOption->minimum,
+                                                       sliderOption->maximum,
+                                                       sliderOption->sliderPosition,
+@@ -3275,9 +3356,9 @@
+ 
+         // centering
+         if (horizontal) {
+-            grooveRect = centerRect(rect, grooveRect.width(), Metrics::Slider_GrooveThickness);
++            grooveRect = centerRect(rect, grooveRect.width(), formFactorMetric(MetricsType::Slider_GrooveThickness));
+         } else {
+-            grooveRect = centerRect(rect, Metrics::Slider_GrooveThickness, grooveRect.height());
++            grooveRect = centerRect(rect, formFactorMetric(MetricsType::Slider_GrooveThickness), grooveRect.height());
+         }
+         return grooveRect;
+     }
+@@ -3297,10 +3378,10 @@
+     size = expandSize(size, 0, Metrics::CheckBox_FocusMarginWidth);
+ 
+     // make sure there is enough height for indicator
+-    size.setHeight(qMax(size.height(), int(Metrics::CheckBox_Size)));
++    size.setHeight(qMax(size.height(), int(formFactorMetric(MetricsType::CheckBox_Size))));
+ 
+     // Add space for the indicator
+-    size.rwidth() += Metrics::CheckBox_Size;
++    size.rwidth() += formFactorMetric(MetricsType::CheckBox_Size);
+ 
+     auto buttonOption = qstyleoption_cast<const QStyleOptionButton *>(option);
+     if (!buttonOption) {
+@@ -3400,6 +3481,11 @@
+      * Qt adds its own tick length directly inside QSlider.
+      * Take it out and replace by ours, if needed
+      */
++    // sliderTickMarksLength() and its caller sliderRectWithoutTickMarks() are
++    // both static (no instance / no isTabletMode() available), and this is
++    // only minor tick-mark padding -- not worth un-static'ing the whole call
++    // chain for. The groove/control thickness that actually matters visually
++    // is already correctly wrapped via formFactorMetric() everywhere else.
+     const int tickLength(disableTicks ? 0
+                                       : (Metrics::Slider_TickLength + Metrics::Slider_TickMarginWidth
+                                          + (Metrics::Slider_GrooveThickness - Metrics::Slider_ControlThickness) / 2));
+@@ -3540,7 +3626,7 @@
+     }
+ 
+     // expand with buttons margin
+-    size = expandSize(size, Metrics::Button_MarginWidth);
++    size = expandSize(size, formFactorMetric(MetricsType::Button_MarginWidth));
+ 
+     // make sure buttons have a minimum width
+     if (hasText) {
+@@ -3572,7 +3658,7 @@
+         size.rwidth() += Metrics::MenuButton_IndicatorWidth;
+     }
+ 
+-    const int marginWidth(autoRaise ? Metrics::ToolButton_MarginWidth : Metrics::Button_MarginWidth + Metrics::Frame_FrameWidth);
++    const int marginWidth(autoRaise ? formFactorMetric(MetricsType::ToolButton_MarginWidth) : formFactorMetric(MetricsType::Button_MarginWidth) + Metrics::Frame_FrameWidth);
+ 
+     size = expandSize(size, marginWidth);
+ 
+@@ -3627,7 +3713,7 @@
+ 
+         // add checkbox indicator width
+         if (menuItemOption->menuHasCheckableItems) {
+-            leftColumnWidth += Metrics::CheckBox_Size + Metrics::MenuItem_ItemSpacing;
++            leftColumnWidth += formFactorMetric(MetricsType::CheckBox_Size) + Metrics::MenuItem_ItemSpacing;
+         }
+ 
+         // add spacing for accelerator
+@@ -3648,10 +3734,10 @@
+ 
+         // make sure height is large enough for icon and arrow
+         size.setHeight(qMax(size.height(), int(Metrics::MenuButton_IndicatorWidth)));
+-        size.setHeight(qMax(size.height(), int(Metrics::CheckBox_Size)));
++        size.setHeight(qMax(size.height(), int(formFactorMetric(MetricsType::CheckBox_Size))));
+         size.setHeight(qMax(size.height(), iconWidth));
+         size.setHeight(size.height() + 1); // Make sure to add one pixel here to follow QQC2 style more closely
+-        return expandSize(size, Metrics::MenuItem_MarginWidth, Metrics::MenuItem_MarginHeight);
++        return expandSize(size, Metrics::MenuItem_MarginWidth, formFactorMetric(MetricsType::MenuItem_MarginHeight));
+     }
+ 
+     case QStyleOptionMenuItem::Separator: {
+@@ -3681,14 +3767,14 @@
+             }
+ 
+             if (menuItemOption->menuHasCheckableItems) {
+-                h = qMax(h, Metrics::CheckBox_Size);
++                h = qMax(h, formFactorMetric(MetricsType::CheckBox_Size));
+             }
+ 
+             h = qMax(h, Metrics::MenuButton_IndicatorWidth);
+-            h += Metrics::MenuItem_MarginHeight; // extra top padding
++            h += formFactorMetric(MetricsType::MenuItem_MarginHeight); // extra top padding
+         }
+ 
+-        return {w + Metrics::MenuItem_MarginWidth * 2, h + Metrics::MenuItem_MarginHeight};
++        return {w + Metrics::MenuItem_MarginWidth * 2, h + formFactorMetric(MetricsType::MenuItem_MarginHeight)};
+     }
+ 
+     // for all other cases, return input
+@@ -4037,7 +4123,7 @@
+     }
+ 
+     // make sure there is enough room to render frame
+-    if (rect.height() < 2 * Metrics::LineEdit_FrameWidth + option->fontMetrics.height()) {
++    if (rect.height() < 2 * formFactorMetric(MetricsType::LineEdit_FrameWidth) + option->fontMetrics.height()) {
+         const auto &background = palette.color(QPalette::Base);
+ 
+         painter->setPen(Qt::NoPen);
+@@ -5356,7 +5442,7 @@
+         arrowRect = centerRect(arrowRect, Metrics::MenuButton_IndicatorWidth, Metrics::MenuButton_IndicatorWidth);
+ 
+         contentsRect.setRight(arrowRect.left() - Metrics::Button_ItemSpacing - 1);
+-        contentsRect.adjust(Metrics::Button_MarginWidth, 0, 0, 0);
++        contentsRect.adjust(formFactorMetric(MetricsType::Button_MarginWidth), 0, 0, 0);
+ 
+         arrowRect = visualRect(option, arrowRect);
+ 
+@@ -5446,7 +5532,7 @@
+ 
+     // Basically pushButtonSizeFromContents.
+     QSize overlaySize = overlayOption.iconSize;
+-    overlaySize = expandSize(overlaySize, Metrics::Button_MarginWidth);
++    overlaySize = expandSize(overlaySize, formFactorMetric(MetricsType::Button_MarginWidth));
+     overlaySize = expandSize(overlaySize, Metrics::Frame_FrameWidth);
+ 
+     // Fit the overlay button and be able to see at least some part of the icon.
+@@ -5578,7 +5664,7 @@
+     } else if (hasIcon && hasText) {
+         const bool leftAlign(widget && widget->property(PropertyNames::toolButtonAlignment).toInt() == Qt::AlignLeft);
+         if (leftAlign) {
+-            const int marginWidth(Metrics::Button_MarginWidth + Metrics::Frame_FrameWidth + 1);
++            const int marginWidth(formFactorMetric(MetricsType::Button_MarginWidth) + Metrics::Frame_FrameWidth + 1);
+             iconRect = {
+                 QPoint(contentsRect.left() + marginWidth,
+                        contentsRect.top() + (contentsRect.height() - iconSize.height()) / 2),
+@@ -5972,7 +6058,7 @@
+         }
+ 
+         if (!menuItemOption->text.isEmpty()) { // icon is ignored on purpose
+-            contentsRect.adjust(0, Metrics::MenuItem_MarginHeight, 0, 0);
++            contentsRect.adjust(0, formFactorMetric(MetricsType::MenuItem_MarginHeight), 0, 0);
+             int flags = visualAlignment(option->direction, Qt::AlignLeft) | Qt::AlignVCenter;
+             flags |= Qt::TextSingleLine | Qt::TextHideMnemonic | Qt::TextDontClip;
+             auto font = menuItemOption->font;
+@@ -6037,7 +6123,7 @@
+     }
+ 
+     // get rect available for contents
+-    auto contentsRect(insideMargin(rect, Metrics::MenuItem_MarginWidth, Metrics::MenuItem_MarginHeight));
++    auto contentsRect(insideMargin(rect, Metrics::MenuItem_MarginWidth, formFactorMetric(MetricsType::MenuItem_MarginHeight)));
+     contentsRect = contentsRect.marginsRemoved(QMargins(Metrics::MenuItem_TextLeftMargin, 0, 0, 0));
+ 
+     // define relevant rectangles
+@@ -6045,9 +6131,9 @@
+     QRect checkBoxRect;
+     if (menuItemOption->menuHasCheckableItems) {
+         checkBoxRect = QRect(contentsRect.left() - Metrics::MenuItem_TextLeftMargin,
+-                             contentsRect.top() + (contentsRect.height() - Metrics::CheckBox_Size) / 2,
+-                             Metrics::CheckBox_Size,
+-                             Metrics::CheckBox_Size);
++                             contentsRect.top() + (contentsRect.height() - formFactorMetric(MetricsType::CheckBox_Size)) / 2,
++                             formFactorMetric(MetricsType::CheckBox_Size),
++                             formFactorMetric(MetricsType::CheckBox_Size));
+         contentsRect.setLeft(checkBoxRect.right() + (Metrics::MenuItem_TextLeftMargin));
+     }
+ 
+@@ -8065,10 +8151,10 @@
+ 
+             if (sliderOption->orientation == Qt::Horizontal) {
+                 auto leftRect(grooveRect);
+-                leftRect.setRight(handleRect.right() - Metrics::Slider_ControlThickness / 2);
++                leftRect.setRight(handleRect.right() - formFactorMetric(MetricsType::Slider_ControlThickness) / 2);
+ 
+                 auto rightRect(grooveRect);
+-                rightRect.setLeft(handleRect.left() + Metrics::Slider_ControlThickness / 2);
++                rightRect.setLeft(handleRect.left() + formFactorMetric(MetricsType::Slider_ControlThickness) / 2);
+ 
+                 if (option->direction == Qt::RightToLeft) {
+                     std::swap(leftRect, rightRect);
+@@ -8082,8 +8168,8 @@
+             } else {
+                 auto topRect(grooveRect);
+                 auto bottomRect(grooveRect);
+-                topRect.setBottom(handleRect.bottom() - Metrics::Slider_ControlThickness / 2);
+-                bottomRect.setTop(handleRect.top() + Metrics::Slider_ControlThickness / 2);
++                topRect.setBottom(handleRect.bottom() - formFactorMetric(MetricsType::Slider_ControlThickness) / 2);
++                bottomRect.setTop(handleRect.top() + formFactorMetric(MetricsType::Slider_ControlThickness) / 2);
+ 
+                 // Background
+                 _helper->renderSliderGroove(painter, topRect.united(bottomRect), grooveColor, palette.color(QPalette::Window));
+@@ -8171,7 +8257,7 @@
+     if (sliderOption->subControls & SC_DialHandle) {
+         // get handle rect
+         auto handleRect(subControlRect(CC_Dial, sliderOption, SC_DialHandle, widget));
+-        handleRect = centerRect(handleRect, Metrics::Slider_ControlThickness, Metrics::Slider_ControlThickness);
++        handleRect = centerRect(handleRect, formFactorMetric(MetricsType::Slider_ControlThickness), formFactorMetric(MetricsType::Slider_ControlThickness));
+ 
+         // handle state
+         const bool handleActive(mouseOver && handleRect.contains(_animations->dialEngine().position(widget)));
+diff -ru '--exclude=.git' pristine/kstyle/breezestyle.h working/kstyle/breezestyle.h
+--- pristine/kstyle/breezestyle.h	2026-09-08 06:18:05.483424904 +0400
++++ working/kstyle/breezestyle.h	2026-09-08 06:19:22.032717291 +0400
+@@ -156,6 +156,9 @@
+     void globalConfigurationChanged(int type, int arg);
+     void loadGlobalAnimationSettings();
+ 
++    //* KWin's tablet mode changed
++    void onTabletModeChanged(bool mode);
++
+     //* standard icons
+     QIcon standardIconImplementation(StandardPixmap, const QStyleOption *, const QWidget *) const;
+ 
+@@ -170,6 +173,15 @@
+     //* load configuration
+     void loadConfiguration();
+ 
++    //* whether KWin currently reports tablet mode active
++    bool isTabletMode() const
++    {
++        return _tabletMode;
++    }
++
++    //* some controls alter the metrics when in tablet mode, possibly more form factors in the future
++    int formFactorMetric(MetricsType type) const;
++
+     //*@name subelementRect specialized functions
+     //@{
+ 
+@@ -504,6 +516,9 @@
+     std::unique_ptr<WidgetExplorer> _widgetExplorer;
+     std::unique_ptr<BreezePrivate::TabBarData> _tabBarData;
+ 
++    //* whether KWin currently reports tablet mode active
++    bool _tabletMode = false;
++
+     //* icon hash
+     using IconCache = QHash<StandardPixmap, QIcon>;
+     IconCache _iconCache;

@@ -1,4 +1,35 @@
 { pkgs, ... }:
+let
+  # SDDM's Breeze theme (theme.conf, QML, logo) ships as part of
+  # plasma-desktop -- confirmed via `nix-store -q --deriver` on the
+  # live /run/current-system/sw/share/sddm/themes/breeze/theme.conf,
+  # NOT kdePackages.breeze (a different package, the decoration/style
+  # one already patched in modules/omnibook/touch-mode-ui.nix). Its
+  # background= key is just a hardcoded image path baked in at build
+  # time (currently one of Breeze's own default wallpapers) -- rather
+  # than patching/rebuilding plasma-desktop for a one-line image-path
+  # change, this copies just the theme directory via a lightweight
+  # runCommand and overwrites that one key, then adds it as an extra
+  # theme via services.displayManager.sddm.extraPackages (the same
+  # mechanism NixOS's own sddm module uses to make Wayland/layer-shell
+  # support discoverable -- see nixos/modules/services/display-
+  # managers/sddm.nix). No C++, no rebuild of anything KDE-sized.
+  #
+  # Copied into the repo (modules/assets/) rather than referenced at
+  # its live ~/Pictures path -- flakes evaluate in pure mode, which
+  # forbids reading arbitrary absolute paths outside the flake's own
+  # source tree (confirmed live: "access to absolute path ... is
+  # forbidden in pure evaluation mode"). Same reason
+  # modules/omnibook/firmware/ish_lnlm.bin lives in-repo rather than
+  # being read from wherever it was originally downloaded.
+  greeterWallpaper = ./assets/greeter-wallpaper.jpeg;
+  greeterTheme = pkgs.runCommand "sddm-breeze-custom-wallpaper" { } ''
+    mkdir -p $out/share/sddm/themes
+    cp -r ${pkgs.kdePackages.plasma-desktop}/share/sddm/themes/breeze $out/share/sddm/themes/breeze-custom-wallpaper
+    chmod -R u+w $out/share/sddm/themes/breeze-custom-wallpaper
+    sed -i "s|^background=.*|background=${greeterWallpaper}|" $out/share/sddm/themes/breeze-custom-wallpaper/theme.conf
+  '';
+in
 {
   # Wayland-only: no X server. services.xserver.xkb is still the right
   # place for keyboard layout config regardless — that option tree is
@@ -30,9 +61,24 @@
   services.displayManager.sddm.enable = true;
   services.displayManager.sddm.wayland.enable = true;
   services.displayManager.sddm.wayland.compositor = "kwin";
+  # extraPackages alone does NOT get merged into
+  # /run/current-system/sw -- confirmed live: the greeter kept falling
+  # back to the embedded stock theme ("the configured theme ... doesn't
+  # exist", journalctl -u display-manager) even after a switch, because
+  # ThemeDir (sw/share/sddm/themes) only reflects
+  # environment.systemPackages. extraPackages is kept too since it's
+  # still the documented/correct option for this, but systemPackages is
+  # what actually makes the theme directory show up where sddm looks.
+  services.displayManager.sddm.extraPackages = [ greeterTheme ];
+  services.displayManager.sddm.theme = "breeze-custom-wallpaper";
+  environment.systemPackages = [ greeterTheme ];
+  services.desktopManager.lomiri.enable = true;
+  services.xserver.displayManager.lightdm.enable = false;
 
   services.desktopManager.plasma6.enable = true;
   services.displayManager.plasma-login-manager.enable = false;
+
+  services.displayManager.defaultSession = "plasma";
 
   # kwin-x11 is a direct, unconditional environment.systemPackages
   # entry from the plasma6 module itself (confirmed via nix why-depends
@@ -41,22 +87,13 @@
   # doesn't touch it; this is the only thing that does.
   environment.plasma6.excludePackages = [ pkgs.kdePackages.kwin-x11 ];
 
-  # Arc 140V (Lunar Lake, Xe2) is already driven by the in-kernel `xe`
-  # driver + Mesa — nothing to swap there. What nixos-generate-config
-  # left out is the userspace acceleration stack: iHD is the VA-API
-  # backend that actually supports Xe2 (the older i965 backend doesn't),
-  # vpl-gpu-rt is oneVPL/Quick Sync, intel-compute-runtime is OpenCL.
-  hardware.graphics = {
-    enable = true;
-    enable32Bit = true;
-    extraPackages = with pkgs; [
-      intel-media-driver
-      vpl-gpu-rt
-      intel-compute-runtime
-    ];
-  };
-
-  environment.sessionVariables.LIBVA_DRIVER_NAME = "iHD";
+  # GPU-specific acceleration packages (Arc 140V / Lunar Lake) live in
+  # modules/omnibook/gpu.nix instead of here -- hardware.graphics.enable
+  # itself stays here since it's the generic "turn graphics acceleration
+  # on" switch any machine would want; only the GPU-model-specific
+  # package choices moved out.
+  hardware.graphics.enable = true;
+  hardware.graphics.enable32Bit = true;
 
   # kscreenlocker keeps whatever keyboard layout was active when the
   # screen locked. With ru+us configured (~/.config/kxkbrc LayoutList),

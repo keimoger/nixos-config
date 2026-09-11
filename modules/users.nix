@@ -19,6 +19,8 @@
       pkgs.orca-slicer
       bitwarden-desktop
       vscode
+      telegram-desktop
+      pkgs.krita
     ];
   };
 

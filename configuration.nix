@@ -13,8 +13,6 @@
     ./modules/desktop.nix
     ./modules/audio.nix
     ./modules/bluetooth.nix
-    ./modules/security.nix
-    ./modules/sensors.nix
     ./modules/fonts.nix
     ./modules/users.nix
     ./modules/plover.nix
@@ -22,8 +20,16 @@
     ./modules/vboard.nix
     ./modules/keyring.nix
     ./modules/home-manager.nix
-    ./modules/libinput.nix
-    ./modules/rotation-lock.nix
+    ./modules/iiko.nix
+    ./modules/tailscale.nix
+    ./modules/remote-builder.nix
+    ./modules/bitwarden.nix
+
+    # Everything specific to this exact laptop (HP OmniBook Ultra Flip
+    # 14-fh0013dx) lives under here -- comment out this one line to
+    # deploy the rest of this config on different hardware. See
+    # modules/omnibook/default.nix for what's inside.
+    ./modules/omnibook
   ];
 
   nixpkgs.config.allowUnfree = true;

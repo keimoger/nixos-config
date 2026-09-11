@@ -38,6 +38,30 @@
 # had to move from a baked-in sentinel to an explicit check at point
 # of use, since which physical edge needs gating now depends on the
 # current angle rather than being fixed.
+#
+# modules/omnibook/patches/libinput-macos-cursor-accel.patch (separate
+# patch, applied alongside the rotation one below): replaces the
+# touchpad's adaptive pointer-acceleration curve in filter-touchpad.c
+# with a macOS-inspired one -- no low-speed deceleration dead-zone
+# (stock ramps down to 0.3x under 7mm/s, which is what makes slow
+# precise drags feel "heavy" relative to macOS) and a smooth cubic
+# ramp above baseline for fast flicks, instead of stock's plateau-
+# then-quadratic shape. This is a hand-tuned approximation of the
+# *feel* -- Apple's real curve is an unpublished IOHIDFamily lookup
+# table, not a formula anyone outside Apple has exact numbers for.
+# Curve shape (not exact constants) adapted from a community macOS-
+# approximation built for libinput's custom-profile points on
+# Hyprland (github gist e6bcccb7787116b8f9c31160fc8bc543 by fufexan)
+# -- that mechanism needs the compositor to expose libinput's
+# LIBINPUT_CONFIG_ACCEL_PROFILE_CUSTOM points API, which KWin's
+# libinput backend doesn't (checked kwin/src/backends/libinput/
+# device.h: only flat/adaptive + a single speed scalar are exposed),
+# so the same curve shape is baked directly into the adaptive profile
+# here instead, reusing KWin's existing flat/adaptive toggle rather
+# than requiring a second patch to KWin. Expect to retune the low/
+# mid/high constants after actually using it -- these are a first
+# pass by feel, same as stock's own curve was ("all just trial and
+# error by tweaking numbers", per its own comment).
 { pkgs, ... }:
 let
   # Manual, on-demand haptic buzz -- independent of any actual click.
@@ -77,12 +101,49 @@ let
   '';
 in
 {
-  nix.settings.max-jobs = 1;
+  # Build parallelism/swap tuning (was max-jobs=1 here) moved to
+  # modules/boot.nix -- a global nix-daemon setting doesn't belong in
+  # a touchpad-specific file, and it needed real tuning (max-jobs +
+  # cores + zram) rather than just "be maximally conservative" once
+  # this file started shipping two source-rebuilt libinput patches.
   nixpkgs.overlays = [
     (final: prev: {
       libinput = prev.libinput.overrideAttrs (old: {
-        patches = (old.patches or [ ]) ++ [ ./patches/libinput-touchpad-rotation.patch ];
+        patches = (old.patches or [ ]) ++ [
+          ./patches/libinput-touchpad-rotation.patch
+          ./patches/libinput-macos-cursor-accel.patch
+        ];
       });
+      kdePackages = prev.kdePackages // {
+        # KWin's swipe-gesture completion distance (src/gestures.cpp's
+        # SwipeGesture::deltaToProgress, dividing by
+        # SwipeGesture::s_minimumDelta) is a hardcoded 200 -- not
+        # exposed via any config file or settings UI, confirmed by
+        # reading the actual KWin source (fetched to
+        # /tmp/.../scratchpad/kwin-src this session) end to end: the
+        # delta KWin uses comes straight from libinput's
+        # gesture_get_d{x,y}_unaccelerated (src/backends/libinput/
+        # events.cpp), which is genuinely in mm (confirmed live via
+        # `evtest` against this exact touchpad -- ABS_MT_POSITION_X/Y
+        # both report Resolution=12 units/mm, so it's NOT scaled
+        # relative to touchpad area, ruling out that original theory).
+        # 200mm cumulative is bigger than this touchpad's entire
+        # diagonal (135x83mm physical, ~158mm diagonal) -- a full
+        # continuous swipe can't reach 100% progress on this hardware,
+        # which reads as gestures needing far more travel than feels
+        # natural ("dead zone"-like sluggishness, not a literal zero-
+        # response zone). Brought down to 40 (a normal, comfortable
+        # swipe distance) instead. The unrelated, separate cause of
+        # horizontal-vs-vertical *speed* asymmetry (single-axis-only
+        # progress after the axis-lock in updateSwipeGesture, discarding
+        # any off-axis motion) was left alone -- a bigger, riskier
+        # behavioral change than a constant tune, not attempted yet.
+        kwin = prev.kdePackages.kwin.overrideAttrs (old: {
+          patches = (old.patches or [ ]) ++ [
+            ./patches/kwin-gesture-min-delta.patch
+          ];
+        });
+      };
     })
   ];
   environment.systemPackages = [

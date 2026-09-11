@@ -1,0 +1,125 @@
+--- pristine/src/filter-touchpad.c	2026-09-06 02:21:19.237699900 +0400
++++ working/src/filter-touchpad.c	2026-09-06 02:21:19.238699888 +0400
+@@ -216,74 +216,55 @@
+ 	speed_in = v_us2s(speed_in) * 25.4 / accel_filter->dpi;
+ 
+ 	/*
+-	   Our acceleration function calculates a factor to accelerate input
+-	   deltas with. The function is a double incline with a plateau,
+-	   with a rough shape like this:
+-
+-	  accel
+-	 factor
+-	   ^         ______
+-	   |        )
+-	   |  _____)
+-	   | /
+-	   |/
+-	   +-------------> speed in
+-
+-	   Except the second incline is a curve, but well, asciiart.
+-
+-	   The first incline is a linear function in the form
+-		   y = ax + b
+-		   where y is speed_out
+-			 x is speed_in
+-			 a is the incline of acceleration
+-			 b is minimum acceleration factor
+-	   for speeds up to the lower threshold, we decelerate, down to 30%
+-	   of input speed.
+-		   hence 1 = a * 7 + 0.3
+-		       0.7 = a * 7  => a := 0.1
+-		   deceleration function is thus:
+-			y = 0.1x + 0.3
+-
+-	   The first plateau is the baseline.
+-
+-	   The second incline is a curve up, based on magic numbers
+-	   obtained by trial-and-error.
+-
+-	   Above the second incline we have another plateau because
+-	   by then you're moving so fast that extra acceleration doesn't
+-	   help.
+-
+-	  Note:
+-	  * The minimum threshold is a result of trial-and-error and
+-	    has no other special meaning.
+-	  * 0.3 is chosen simply because it is above the Nyquist frequency
+-	    for subpixel motion within a pixel.
++	   macOS-inspired curve, replacing stock libinput's "double incline
++	   with a plateau" shape above. This is a hand-tuned approximation
++	   of the *qualitative feel* people describe when comparing macOS
++	   trackpad tracking to Linux/libinput -- not a literal port of
++	   Apple's real (proprietary, IOHIDFamily lookup-table-based, not
++	   published as a formula) acceleration curve. Curve *shape*
++	   (cubic polynomial in normalized speed) is adapted from a
++	   community-built macOS-approximation used with libinput's
++	   custom-profile points on Hyprland (github gist by fufexan,
++	   e6bcccb7787116b8f9c31160fc8bc543) -- that project sets curve
++	   points directly via libinput's LIBINPUT_CONFIG_ACCEL_PROFILE_
++	   CUSTOM, which KWin's libinput backend has no support for
++	   (checked: kwin/src/backends/libinput/device.h only exposes
++	   flat/adaptive + a single speed scalar, no points API) -- so
++	   here the same cubic *shape* is baked directly into the existing
++	   adaptive profile instead, reusing KWin's already-present
++	   flat/adaptive toggle rather than requiring a second patch to
++	   KWin itself.
++
++	   Two deliberate differences from stock's curve:
++
++	   1. No deceleration dead-zone for slow movement. Stock ramps
++	      DOWN to 0.3x under 7mm/s for sub-pixel stability -- but
++	      that's exactly what makes slow, precise drags feel "heavy"
++	      on Linux relative to macOS. Factor starts flat at baseline
++	      instead, all the way down to zero speed.
++	   2. A smooth, continuously-increasing cubic ramp above baseline,
++	      instead of stock's plateau-then-quadratic shape, so a fast
++	      flick travels noticeably farther (closer to macOS's "flick
++	      across two monitors in one swipe" feel) while still bounded
++	      by max_factor so extreme speed doesn't become uncontrollable.
++
++	   speed_norm uses the existing `threshold` (130mm/s) purely as a
++	   convenient reference scale carried over from stock's own
++	   domain-of-interest, not because 130 itself is meaningful here.
++	   low/mid/high were hand-tuned by feel (live testing on the exact
++	   touchpad this runs on) starting from the gist's cubic shape --
++	   expect to retune these further after actually using it.
+ 	*/
+-
+-	if (speed_in < 7.0) {
+-		factor = min(baseline, 0.1 * speed_in + 0.3);
+-		/* up to the threshold, we keep factor 1, i.e. 1:1 movement */
+-	} else if (speed_in < threshold) {
+-		factor = baseline;
+-	} else {
+-
+-		/* Acceleration function above the threshold is a curve up
+-		   to four times the threshold, because why not.
+-
+-		   Don't assume anything about the specific numbers though, this was
+-		   all just trial and error by tweaking numbers here and there, then
+-		   the formula was optimized doing basic maths.
+-
+-		   You could replace this with some other random formula that gives
+-		   the same numbers and it would be just as correct.
+-
+-		 */
+-		const double upper_threshold = threshold * 4.0;
+-		speed_in = min(speed_in, upper_threshold);
+-
+-		factor = 0.0025 * (speed_in / threshold) * (speed_in - threshold) +
+-			 baseline;
+-	}
++	const double low = 0.15;
++	const double mid = 0.05;
++	const double high = 0.02;
++	const double max_factor = 5.0;
++	double speed_norm = speed_in / threshold;
++
++	factor = baseline * (1.0 + low * speed_norm +
++			      mid * speed_norm * speed_norm +
++			      high * speed_norm * speed_norm * speed_norm);
++	factor = min(factor, max_factor);
+ 
+ 	factor *= accel_filter->speed_factor;
+ 	return factor * TP_MAGIC_SLOWDOWN;

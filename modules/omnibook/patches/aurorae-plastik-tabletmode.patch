@@ -1,0 +1,34 @@
+diff -ru '--exclude=.git' pristine/v1/themes/plastik/package/contents/ui/main.qml working/v1/themes/plastik/package/contents/ui/main.qml
+--- pristine/v1/themes/plastik/package/contents/ui/main.qml	2026-09-08 05:45:18.083703936 +0400
++++ working/v1/themes/plastik/package/contents/ui/main.qml	2026-09-08 05:45:32.656808199 +0400
+@@ -6,6 +6,7 @@
+ import QtQuick
+ import org.kde.kwin.decoration
+ import org.kde.kwin.decorations.plastik
++import org.kde.kirigami as Kirigami
+ 
+ Decoration {
+     function readBorderSize() {
+@@ -212,7 +213,7 @@
+ 
+             Item {
+                 id: titleRow
+-                property real captionHeight: caption.implicitHeight + 4
++                property real captionHeight: (Kirigami.Settings.tabletMode ? 2 : 1) * (caption.implicitHeight + 4)
+                 property int topMargin: 3
+                 property int bottomMargin: 1
+                 property real normalHeight: captionHeight + bottomMargin + topMargin
+@@ -410,6 +411,13 @@
+         }
+     }
+     Connections {
++        target: Kirigami.Settings
++        function onTabletModeChanged() {
++            borders.setTitle(top.normalHeight);
++            maximizedBorders.setTitle(top.maximizedHeight);
++        }
++    }
++    Connections {
+         target: decorationSettings
+         function onBorderSizeChanged() {
+             root.readBorderSize();
