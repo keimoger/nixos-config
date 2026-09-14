@@ -8,15 +8,6 @@
   # tailscaled over its usual unix socket. System-wide XDG autostart
   # (rather than a home-manager one) since this is a single-user
   # machine and it keeps everything tailscale-related in one file.
-  environment.systemPackages = [ pkgs.trayscale ];
-  environment.etc."xdg/autostart/trayscale.desktop".text = ''
-    [Desktop Entry]
-    Type=Application
-    Name=Trayscale
-    Exec=${pkgs.trayscale}/bin/trayscale --hide-window
-    Icon=trayscale
-    X-GNOME-Autostart-enabled=true
-  '';
 
   # Direct P2P connectivity (NAT traversal) between tailnet peers --
   # separate from, and complementary to, trustedInterfaces below (that

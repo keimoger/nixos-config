@@ -2,6 +2,7 @@
 {
   networking.hostName = "keibook";
   networking.networkmanager.enable = true;
+  services.resolved.enable = true;
 
   # Was previously just a plain package install (modules/users.nix),
   # which pulled in the kdeconnect-kde binary and its daemon started

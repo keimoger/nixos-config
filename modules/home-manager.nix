@@ -31,8 +31,19 @@
         # default in KWin — this is only kept for anything still relying
         # on the linear next/previous actions.
         shortcuts.kwin = {
-          "Switch to Next Desktop" = "Ctrl+Alt+Right";
-          "Switch to Previous Desktop" = "Ctrl+Alt+Left";
+          # Both bindings kept rather than one replacing the other:
+          # Ctrl+Alt+Right/Left was already set here deliberately (see
+          # below), Meta+Alt+L/H came from a friend's exported shortcut
+          # scheme (~/Desktop/keiboardshortcuts.kksrc) -- either combo
+          # now triggers the same action.
+          "Switch to Next Desktop" = [
+            "Ctrl+Alt+Right"
+            "Meta+Alt+L"
+          ];
+          "Switch to Previous Desktop" = [
+            "Ctrl+Alt+Left"
+            "Meta+Alt+H"
+          ];
 
           # macOS-style Cmd+Q: graceful quit, not a force-kill. KWin's
           # "Window Close" action (display name "Close Window",
@@ -48,13 +59,165 @@
             "Alt+F4"
             "Meta+Q"
           ];
+
+          # --- everything below imported from a friend's exported KDE
+          # shortcut scheme (~/Desktop/keiboardshortcuts.kksrc) ---
+          "Activate Window Demanding Attention" = "Meta+Ctrl+A";
+          "Cube" = "Meta+C";
+          "Cycle Overview" = "Meta+W";
+          "Decrease Opacity" = "Meta+Ctrl+-";
+          "Expose" = "Ctrl+F9";
+          "ExposeAll" = [
+            "Launch (C)"
+            "Ctrl+F10"
+          ];
+          "ExposeClass" = "Ctrl+F7";
+          "Grid View" = "Meta+G";
+          "Increase Opacity" = "Meta+Ctrl+=";
+          "Kill Window" = "Meta+Ctrl+Esc";
+          "MoveMouseToCenter" = "Meta+F6";
+          "MoveMouseToFocus" = "Meta+F5";
+          "ShowDesktopGrid" = "Meta+F8";
+          "Suspend Compositing" = "Alt+Shift+F12";
+          "Switch One Desktop Down" = "Meta+Ctrl+Down";
+          "Switch One Desktop Up" = "Meta+Ctrl+Up";
+          "Switch One Desktop to the Left" = "Meta+Ctrl+Left";
+          "Switch One Desktop to the Right" = "Meta+Ctrl+Right";
+          "Switch Window Down" = "Meta+Alt+Down";
+          "Switch Window Left" = "Meta+Alt+Left";
+          "Switch Window Right" = "Meta+Alt+Right";
+          "Switch Window Up" = "Meta+Alt+Up";
+          "Switch to Desktop 1" = "Meta+1";
+          "Switch to Desktop 2" = "Meta+2";
+          "Switch to Desktop 3" = "Meta+3";
+          "Switch to Desktop 4" = "Meta+4";
+          "Switch to Desktop 5" = "Meta+5";
+          "Switch to Desktop 6" = "Meta+6";
+          "Switch to Desktop 7" = "Meta+7";
+          "Switch to Desktop 8" = "Meta+8";
+          "Switch to Desktop 9" = "Meta+9";
+          "Walk Through Windows" = "Alt+Tab";
+          "Walk Through Windows (Reverse)" = "Alt+Shift+Tab";
+          "Walk Through Windows of Current Application" = "Alt+`";
+          "Walk Through Windows of Current Application (Reverse)" = "Alt+~";
+          "Window Minimize" = "Meta+PgDown";
+          "Window One Desktop Down" = "Meta+Ctrl+Shift+Down";
+          "Window One Desktop Up" = "Meta+Ctrl+Shift+Up";
+          "Window One Desktop to the Left" = [
+            "Meta+Ctrl+Shift+Left"
+            "Meta+Ctrl+Shift+H"
+          ];
+          "Window One Desktop to the Right" = [
+            "Meta+Ctrl+Shift+L"
+            "Meta+Ctrl+Shift+Right"
+          ];
+          "Window One Screen Down" = "Meta+Ctrl+Shift+J";
+          "Window Operations Menu" = "Alt+F3";
+          "Window Quick Tile Top Right" = "Meta+Shift+O";
+          "Window Restore" = "Meta+Backspace";
+          "Window to Desktop 1" = "Meta+!";
+          "Window to Desktop 2" = "Meta+@";
+          "Window to Desktop 3" = "Meta+#";
+          "Window to Desktop 4" = "Meta+$";
+          "Window to Desktop 5" = "Meta+%";
+          "Window to Desktop 6" = "Meta+^";
+          "Window to Desktop 7" = "Meta+&";
+          "Window to Desktop 8" = "Meta+*";
+          "Window to Desktop 9" = "Meta+(";
+          "Window to Next Screen" = "Meta+Shift+Right";
+          "Window to Previous Screen" = "Meta+Shift+Left";
+          "disableInputCapture" = "Meta+Shift+Esc";
+          "view_zoom_in" = [
+            "Meta+="
+            "Meta++"
+          ];
+          "view_zoom_out" = "Meta+-";
+
+          # Krohnkite (dynamic tiling KWin script -- installed via
+          # home.packages below, enabled via the kwinrc Plugins entry
+          # further down). Also from the friend's exported scheme.
+          "KrohnkiteDecrease" = "Meta+Shift+I";
+          "KrohnkiteFloatAll" = "Meta+Shift+F";
+          "KrohnkiteFocusDown" = "Meta+J";
+          "KrohnkiteFocusLeft" = "Meta+H";
+          "KrohnkiteFocusPrev" = "Meta+,";
+          "KrohnkiteFocusRight" = "Meta+L";
+          "KrohnkiteFocusUp" = "Meta+K";
+          "KrohnkiteGrowHeight" = "Meta+Ctrl+J";
+          "KrohnkiteIncrease" = "Meta+I";
+          "KrohnkiteMonocleLayout" = "Meta+F";
+          "KrohnkiteNextLayout" = "Meta+\\";
+          "KrohnkitePreviousLayout" = "Meta+|";
+          "KrohnkiteRotate" = "Meta+R";
+          "KrohnkiteRotatePart" = "Meta+Shift+R";
+          "KrohnkiteSetMaster" = "Meta+Return";
+          "KrohnkiteShiftDown" = "Meta+Shift+J";
+          "KrohnkiteShiftLeft" = "Meta+Shift+H";
+          "KrohnkiteShiftRight" = "Meta+Shift+L";
+          "KrohnkiteShiftUp" = "Meta+Shift+K";
+          "KrohnkiteShrinkHeight" = "Meta+Ctrl+K";
+          "KrohnkiteShrinkWidth" = "Meta+Ctrl+H";
+          "KrohnkiteStairLayout" = "Meta+T";
+          "KrohnkiteToggleFloat" = "Meta+Shift+P";
+          "KrohnkitegrowWidth" = "Meta+Ctrl+L";
         };
 
         # Meta+Q was already KDE's own stock default for this
         # (plasmashell's "manage activities" / Activity Switcher, not
         # something configured deliberately in this config) -- cleared
         # so it doesn't fight with Close Window above for the same key.
-        shortcuts.plasmashell."manage activities" = "none";
+        #
+        # Everything else in this block (and the ksmserver/powerdevil
+        # blocks below) came from a friend's exported KDE shortcut
+        # scheme, ~/Desktop/keiboardshortcuts.kksrc.
+        shortcuts.plasmashell = {
+          "manage activities" = "none";
+          "activate application launcher" = "Meta+D";
+          "clipboard_action" = "Meta+Ctrl+X";
+          "cycle-panels" = [
+            "Meta+Ctrl+P"
+            "Meta+Alt+P"
+          ];
+          "next activity" = "Meta+Ctrl+Tab";
+          "repeat_action" = "Meta+Ctrl+R";
+          "show dashboard" = "Ctrl+F12";
+          "show-on-mouse-pos" = "Meta+V";
+          "stop current activity" = "Meta+S";
+        };
+
+        shortcuts.ksmserver = {
+          "Lock Session" = [
+            "Screensaver"
+            "Meta+Esc"
+          ];
+          "Log Out" = "Ctrl+Alt+Del";
+        };
+
+        shortcuts.org_kde_powerdevil = {
+          "Decrease Keyboard Brightness" = "Keyboard Brightness Down";
+          "Decrease Screen Brightness" = "Monitor Brightness Down";
+          "Decrease Screen Brightness Small" = "Shift+Monitor Brightness Down";
+          "Hibernate" = "Hibernate";
+          "Increase Keyboard Brightness" = "Keyboard Brightness Up";
+          "Increase Screen Brightness" = "Monitor Brightness Up";
+          "Increase Screen Brightness Small" = "Shift+Monitor Brightness Up";
+          "PowerDown" = "Power Down";
+          "PowerOff" = "Power Off";
+          "Sleep" = "Sleep";
+          "Toggle Keyboard Backlight" = "Keyboard Light On/Off";
+          "powerProfile" = [
+            "Meta+B"
+            "Battery"
+          ];
+        };
+
+        # Krohnkite dynamic-tiling KWin script -- "krohnkiteEnabled" is
+        # its KPlugin.Id (res/metadata.json) with "Enabled" appended,
+        # same convention plasma-manager itself uses for Polonium
+        # (Plugins.poloniumEnabled in kwin.nix). No typed plasma-manager
+        # option exists for Krohnkite specifically, hence the raw
+        # configFile escape hatch.
+        configFile."kwinrc"."Plugins"."krohnkiteEnabled" = true;
 
         # List order sets which layout is default/first (kxkbrc
         # LayoutList). Was ru,us — ru being first meant a fresh login
@@ -103,25 +266,19 @@
 
       home.stateVersion = "26.05";
 
-      # google-chrome (modules/users.nix) is a plain unwrapped package
-      # with no Wayland opt-in, so it runs as an XWayland client by
-      # default even on this Wayland-only session (modules/desktop.nix)
-      # -- XWayland translates the touchpad's continuous libinput
-      # scroll deltas into synthetic X11 wheel-click events, which is
-      # inherently steppy, rather than passing through real per-pixel
-      # motion the way a native Wayland client (every KDE/Qt app here)
-      # gets. This is why scrolling only felt chunky in Chrome
-      # specifically, unconditionally, regardless of the KWin-level
-      # ScrollFactor fix above (which only rescales whatever KWin
-      # itself receives -- irrelevant to an XWayland/X11 client, which
-      # never goes through KWin's own libinput axis handling at all).
-      # Chrome reads flags (one per line, no leading --stripping
-      # needed) from this exact path -- ozone-platform-hint=auto makes
-      # it detect the Wayland session and connect as a native client
-      # instead, restoring real continuous scroll deltas.
-      xdg.configFile."google-chrome-flags.conf".text = ''
-        --ozone-platform-hint=auto
-      '';
+      # Krohnkite (dynamic tiling KWin script, enabled via the kwinrc
+      # Plugins entry above). Installed per-user rather than system-wide
+      # since KWin runs in this user's own session and already picks up
+      # share/kwin/scripts from the user's home-manager profile.
+      home.packages = [ pkgs.kdePackages.krohnkite ];
+
+      # google-chrome's actual Wayland/scroll-smoothing flags live on the
+      # package itself now (modules/users.nix, commandLineArgs override)
+      # -- this xdg.configFile approach was removed after confirming
+      # nixpkgs' generated launcher wrapper never reads
+      # ~/.config/google-chrome-flags.conf at all (that's a Debian/
+      # Ubuntu-specific launcher convention, not something this wrapper
+      # implements); it was silently doing nothing.
 
       # This is the actual root cause of every "fonts look like ass"
       # complaint this whole session, on both the host system and every
@@ -168,12 +325,32 @@
       # module, and it's not a file we can just overwrite wholesale — most
       # of it (identity, capabilities, model_info) is hardware state the
       # app discovers and persists for this exact mouse, not config we
-      # authored. So this patches only the GestureButton bindings block in
-      # place by line range, byte-identical elsewhere, rather than round
-      # -tripping the whole file through a TOML library (verified: that
-      # reformats inline tables into full [section] headers and collapses
-      # arrays — technically equivalent TOML, but an untested surface to
-      # risk for zero benefit here).
+      # authored. So this patches only the five GestureButton binding
+      # lines in place, byte-identical elsewhere.
+      #
+      # This activation script previously assumed one flat
+      # `[...bindings.GestureButton]` section with five inline-table
+      # entries (deliberately, to dodge a TOML round-trip that would
+      # reformat it into split [section] headers instead — see prior
+      # git history). That assumption broke anyway: OpenLogi's own
+      # daemon rewrites this file in exactly that split-section shape
+      # whenever it touches it, independent of anything this script
+      # does. The grep for the old flat header then matched nothing,
+      # and since this runs under home-manager's `set -e` activation
+      # script, that silently killed the *entire* activation with no
+      # error output — confirmed live via `journalctl -u
+      # home-manager-keimoger.service`, failing on every single run
+      # since 2026-09-12 right after "Activating
+      # openlogiGestureBindings", with nothing after it. Rewritten to
+      # target the actual current shape (one `[...GestureButton.<Dir>]`
+      # section per direction, confirmed directly against the live
+      # file) instead, using python3 for the per-section text
+      # replacement rather than nested sed address/change commands --
+      # far fewer quoting layers to get wrong for the same result. Not
+      # wrapped in `set -e`-defeating error handling, since a missing
+      # match now should be a loud failure again: it means the format
+      # shifted a third time and this needs another look, not a silent
+      # no-op.
       #
       # These call KWin's grid-aware "Switch One Desktop <dir>" actions
       # directly via qdbus rather than injecting keystrokes — OpenLogi's
@@ -187,27 +364,40 @@
       # Mission Control than "Overview", which is per-window instead of
       # per-desktop) per preference, not the map's literal direction names.
       home.activation.openlogiGestureBindings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-              configFile="$HOME/.config/openlogi/config.toml"
-              if [ -f "$configFile" ]; then
-                startLine=$(${pkgs.gnugrep}/bin/grep -n '^\[devices\."direct:046d:b042:serial:2543apyjhv18"\.bindings\.GestureButton\]$' "$configFile" | ${pkgs.coreutils}/bin/cut -d: -f1)
-                if [ -n "$startLine" ]; then
-                  endLine=$(${pkgs.coreutils}/bin/tail -n "+$((startLine + 1))" "$configFile" | ${pkgs.gnugrep}/bin/grep -n '^\[' | ${pkgs.coreutils}/bin/head -1 | ${pkgs.coreutils}/bin/cut -d: -f1)
-                  if [ -n "$endLine" ]; then
-                    endLine=$((startLine + endLine - 1))
-                  else
-                    endLine=$(${pkgs.coreutils}/bin/wc -l < "$configFile")
-                  fi
-                  { ${pkgs.coreutils}/bin/head -n "$startLine" "$configFile"; cat <<'BINDINGS'
-        Up = { RunShellCommand = "/run/current-system/sw/bin/qdbus org.kde.kglobalaccel /component/kwin invokeShortcut 'Switch One Desktop Down'" }
-        Down = { RunShellCommand = "/run/current-system/sw/bin/qdbus org.kde.kglobalaccel /component/kwin invokeShortcut 'Switch One Desktop Up'" }
-        Left = { RunShellCommand = "/run/current-system/sw/bin/qdbus org.kde.kglobalaccel /component/kwin invokeShortcut 'Switch One Desktop to the Right'" }
-        Right = { RunShellCommand = "/run/current-system/sw/bin/qdbus org.kde.kglobalaccel /component/kwin invokeShortcut 'Switch One Desktop to the Left'" }
-        Click = { RunShellCommand = "/run/current-system/sw/bin/qdbus org.kde.kglobalaccel /component/kwin invokeShortcut 'Grid View'" }
+        configFile="$HOME/.config/openlogi/config.toml"
+        if [ -f "$configFile" ]; then
+          ${pkgs.python3}/bin/python3 - "$configFile" <<'PYEOF'
+import re
+import sys
 
-        BINDINGS
-                  ${pkgs.coreutils}/bin/tail -n "+$((endLine + 1))" "$configFile"; } > "$configFile.new" && mv "$configFile.new" "$configFile"
-                fi
-              fi
+path = sys.argv[1]
+with open(path) as f:
+    text = f.read()
+
+device = 'direct:046d:b042:serial:2543apyjhv18'
+shortcuts = {
+    "Up": "Switch One Desktop Down",
+    "Down": "Switch One Desktop Up",
+    "Left": "Switch One Desktop to the Right",
+    "Right": "Switch One Desktop to the Left",
+    "Click": "Grid View",
+}
+
+for direction, shortcut in shortcuts.items():
+    header = f'[devices."{device}".bindings.GestureButton.{direction}]'
+    line = (
+        'RunShellCommand = "/run/current-system/sw/bin/qdbus '
+        f"org.kde.kglobalaccel /component/kwin invokeShortcut '{shortcut}'\""
+    )
+    pattern = re.escape(header) + r"\n[^\n]*\n"
+    text, n = re.subn(pattern, header + "\n" + line + "\n", text)
+    if n != 1:
+        sys.exit(f"openlogiGestureBindings: expected exactly one match for {direction!r}, got {n}")
+
+with open(path, "w") as f:
+    f.write(text)
+PYEOF
+        fi
       '';
     };
 }

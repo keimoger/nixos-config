@@ -13,7 +13,7 @@
 # never committed; only the path is referenced here.
 { ... }:
 {
-  nix.distributedBuilds = true;
+  nix.distributedBuilds = false;
   nix.buildMachines = [
     {
       # There's no dedicated port field on this submodule (checked the

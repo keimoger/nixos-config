@@ -36,6 +36,7 @@
       ...
     }@inputs:
     {
+      source = ./.;
       nixosConfigurations.keibook = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux"; # Or your system architecture
         specialArgs = { inherit inputs; };

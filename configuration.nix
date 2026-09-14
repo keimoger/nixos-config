@@ -25,6 +25,15 @@
     ./modules/remote-builder.nix
     ./modules/bitwarden.nix
 
+    # Disabled: velocity-dependent scroll momentum made sense for a
+    # touchpad (never actually implemented -- raw evdev-frame data is
+    # pre-gesture-recognition, so it'd need real finger-tracking math,
+    # not just this) but not for a mouse wheel, where every notch is
+    # the same fixed size regardless of spin speed -- a single fixed
+    # scroll amount per click is the wanted behavior there. Left in
+    # place (not deleted) in case touchpad inertia gets built later.
+    # ./modules/scroll-inertia.nix
+
     # Everything specific to this exact laptop (HP OmniBook Ultra Flip
     # 14-fh0013dx) lives under here -- comment out this one line to
     # deploy the rest of this config on different hardware. See
