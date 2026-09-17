@@ -7,6 +7,24 @@ let
     export HOME=$TMPDIR
     mkdir -p $out/share/nushell/vendor/autoload
     ${pkgs.atuin}/bin/atuin init nu > $out/share/nushell/vendor/autoload/atuin.nu
+
+    # `atuin init nu` (still true as of 18.19.0) defines two separate
+    # keybindings -- Ctrl+R search and Up-arrow search -- both literally
+    # named "atuin" instead of unique names, which nushell warns about
+    # on every startup ("Multiple keybindings share a name"). Cosmetic
+    # only (both bindings still work either way, per nushell's own
+    # warning text), but trivial to fix here since this script is
+    # already regenerated and pinned at build time.
+    ${pkgs.perl}/bin/perl -0777 -pi -e '
+      s/name: atuin(\s*\n\s*modifier: control)/name: atuin_ctrl_r$1/;
+      s/name: atuin(\s*\n\s*modifier: none)/name: atuin_up$1/;
+    ' $out/share/nushell/vendor/autoload/atuin.nu
+  '';
+
+  # Nushell prints a startup banner (version, tips, GitHub link) by
+  # default -- this is its own documented off switch.
+  noBannerNuAutoload = pkgs.writeTextDir "share/nushell/vendor/autoload/no-banner.nu" ''
+    $env.config.show_banner = false
   '';
 
   carapaceNuAutoload = pkgs.writeTextDir "share/nushell/vendor/autoload/carapace.nu" ''
@@ -34,6 +52,7 @@ in
     enable = true;
     autoloads = [
       atuinNuAutoload
+      noBannerNuAutoload
       carapaceNuAutoload
       nixShellPkgNuAutoload
     ];
@@ -97,5 +116,25 @@ in
     nixfmt
     carapace
     openlogi
+    btop
+    anydesk
+    nix-output-monitor
+    jetbrains.idea
+    android-studio
   ];
+
+  # btop's own "show_cpu_watts" (on by default) reads
+  # /sys/class/powercap/intel-rapl:0/energy_uj directly (confirmed in
+  # its source, src/linux/btop_collect.cpp) -- confirmed live this file
+  # is root-only (-r--------), so it silently comes up blank for a
+  # normal user. btop's own Makefile documents the fix: grant the
+  # binary these two capabilities instead of full setuid/sudo.
+  # /run/wrappers/bin is ahead of the regular profile in PATH, so
+  # plain `btop` picks up this wrapped version automatically.
+  security.wrappers.btop = {
+    owner = "root";
+    group = "root";
+    capabilities = "cap_dac_read_search,cap_perfmon=+ep";
+    source = "${pkgs.btop}/bin/btop";
+  };
 }

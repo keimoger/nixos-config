@@ -146,6 +146,19 @@
         "type": "github"
       }
     },
+    "plover-altcase": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1789515838,
+        "narHash": "sha256-4qUFpxrNLp1tR4pM5ySdG04Zu/Wf4SvGBxFNfQUsDXE=",
+        "path": "/home/keimoger/projects/plover-altcase",
+        "type": "path"
+      },
+      "original": {
+        "path": "/home/keimoger/projects/plover-altcase",
+        "type": "path"
+      }
+    },
     "plover-flake": {
       "inputs": {
         "nixpkgs": [
@@ -261,6 +274,7 @@
         "lanzaboote": "lanzaboote",
         "nixpkgs": "nixpkgs",
         "plasma-manager": "plasma-manager",
+        "plover-altcase": "plover-altcase",
         "plover-flake": "plover-flake",
         "plover-russian-firebird": "plover-russian-firebird"
       }

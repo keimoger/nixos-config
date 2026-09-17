@@ -17,4 +17,15 @@
   ];
 
   environment.sessionVariables.LIBVA_DRIVER_NAME = "iHD";
+
+  # Disables PSR2's "selective fetch" sub-feature (only redraws the
+  # changed part of the screen) -- the newest, most complex, most
+  # bug-prone piece of Panel Self Refresh, and specifically named in an
+  # open upstream xe driver bug report describing a Lunar Lake hard
+  # freeze over USB-C DP-altmode (the same connection this laptop's
+  # external monitor uses via a dock). Confirmed via `modinfo xe` this
+  # sub-feature defaults to on. Plain PSR/PSR2 negotiation stays
+  # enabled -- this only drops the one specific sub-feature implicated,
+  # not PSR's power savings wholesale.
+  boot.kernelParams = [ "xe.enable_psr2_sel_fetch=0" ];
 }

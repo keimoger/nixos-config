@@ -11,6 +11,10 @@
       url = "path:/home/keimoger/projects/plover-russian-firebird";
       flake = false;
     };
+    plover-altcase = {
+      url = "path:/home/keimoger/projects/plover-altcase";
+      flake = false;
+    };
     lanzaboote = {
       url = "github:nix-community/lanzaboote/master"; # or latest stable tag/master
       inputs.nixpkgs.follows = "nixpkgs";

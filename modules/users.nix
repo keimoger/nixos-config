@@ -1,5 +1,13 @@
 { pkgs, ... }:
 {
+  # See modules/davinci-resolve-package.nix for why this is needed --
+  # nixpkgs' own pinned download hash for it is currently stale.
+  nixpkgs.overlays = [
+    (final: prev: {
+      davinci-resolve = final.callPackage ./davinci-resolve-package.nix { };
+    })
+  ];
+
   users.users."keimoger" = {
     isNormalUser = true;
     description = "Kei Moger";
@@ -38,8 +46,27 @@
       pkgs.orca-slicer
       bitwarden-desktop
       vscode
-      telegram-desktop
+      # Forces XWayland instead of native Wayland. This display runs at
+      # 125% (fractional) scaling (confirmed via kwinoutputconfig.json
+      # / KWin's own support info) -- native KDE/Qt apps handle that
+      # fine, but Telegram's own custom QRhi-based rendering doesn't
+      # cooperate well with Wayland's fractional-scale protocol and
+      # falls into a much more expensive internal rescale path,
+      # tanking to ~3fps. Confirmed live: a one-off `QT_QPA_PLATFORM=
+      # xcb telegram-desktop` run stayed smooth, while the normal
+      # (native Wayland) launch stays janky no matter how long it's
+      # been running. XWayland clients render at a clean 1x and let
+      # the compositor do one cheap GPU-composited scale of the whole
+      # window instead, sidestepping the app's own scaling entirely.
+      (telegram-desktop.overrideAttrs (old: {
+        qtWrapperArgs = (old.qtWrapperArgs or [ ]) ++ [
+          "--set"
+          "QT_QPA_PLATFORM"
+          "xcb"
+        ];
+      }))
       pkgs.krita
+      davinci-resolve
     ];
   };
 

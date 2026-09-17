@@ -32,7 +32,14 @@
     # the same fixed size regardless of spin speed -- a single fixed
     # scroll amount per click is the wanted behavior there. Left in
     # place (not deleted) in case touchpad inertia gets built later.
-    # ./modules/scroll-inertia.nix
+    ./modules/scroll-inertia.nix
+    # Re-enabled with a rewritten plugin: the original timer-based
+    # position-interpolation approach caused random ~300-500ms input
+    # hangs and barely helped the actual feel. Replaced with a stateless
+    # per-frame magnitude scaling approach (no timer, no interpolation) --
+    # see modules/touchpad-smoothing.lua for the full reasoning, informed
+    # by reverse-engineering Windows' own Synaptics driver defaults.
+    ./modules/touchpad-smoothing.nix
 
     # Everything specific to this exact laptop (HP OmniBook Ultra Flip
     # 14-fh0013dx) lives under here -- comment out this one line to

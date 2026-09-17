@@ -116,31 +116,55 @@ in
       });
       kdePackages = prev.kdePackages // {
         # KWin's swipe-gesture completion distance (src/gestures.cpp's
-        # SwipeGesture::deltaToProgress, dividing by
-        # SwipeGesture::s_minimumDelta) is a hardcoded 200 -- not
-        # exposed via any config file or settings UI, confirmed by
-        # reading the actual KWin source (fetched to
-        # /tmp/.../scratchpad/kwin-src this session) end to end: the
-        # delta KWin uses comes straight from libinput's
-        # gesture_get_d{x,y}_unaccelerated (src/backends/libinput/
-        # events.cpp), which is genuinely in mm (confirmed live via
-        # `evtest` against this exact touchpad -- ABS_MT_POSITION_X/Y
-        # both report Resolution=12 units/mm, so it's NOT scaled
-        # relative to touchpad area, ruling out that original theory).
-        # 200mm cumulative is bigger than this touchpad's entire
-        # diagonal (135x83mm physical, ~158mm diagonal) -- a full
-        # continuous swipe can't reach 100% progress on this hardware,
-        # which reads as gestures needing far more travel than feels
-        # natural ("dead zone"-like sluggishness, not a literal zero-
-        # response zone). Brought down to 40 (a normal, comfortable
-        # swipe distance) instead. The unrelated, separate cause of
-        # horizontal-vs-vertical *speed* asymmetry (single-axis-only
-        # progress after the axis-lock in updateSwipeGesture, discarding
-        # any off-axis motion) was left alone -- a bigger, riskier
-        # behavioral change than a constant tune, not attempted yet.
+        # SwipeGesture::deltaToProgress, dividing by the hardcoded
+        # constant SwipeGesture::s_minimumDelta = 200) is not exposed
+        # via any config file or settings UI. The delta it divides comes
+        # straight from libinput's gesture_get_d{x,y}_unaccelerated.
+        #
+        # An earlier version of this comment claimed that value was
+        # genuinely millimeters (based on this touchpad's ABS_MT_POSITION
+        # resolution reading 12 units/mm) and that stock 200 was larger
+        # than the touchpad's own 158mm diagonal, so it patched
+        # s_minimumDelta down to 20 to make gestures completable at all.
+        # That confused "this device's resolution is 12 units/mm" with
+        # "the reported delta values are already in mm" -- they're not;
+        # they're raw sensor units, so mm = delta / ~9-12. Directly
+        # measured live via `libinput debug-events` on a real edge-to-edge
+        # swipe across this touchpad's known ~135mm width: cumulative
+        # unaccelerated delta summed to ~1184, i.e. ~8.8 units/mm --
+        # confirming it's raw sensor units, not mm. Under that corrected
+        # ratio, stock 200 is only ~23mm of real travel: a perfectly
+        # normal, comfortable single swipe, not remotely close to
+        # physically impossible on this hardware. The real problem was
+        # never this constant -- see below -- so it's back to stock
+        # (no patch needed for this part at all).
+        #
+        # The actual bug: src/globalshortcuts.cpp's GlobalShortcut
+        # constructor connects BOTH SwipeGesture::triggered AND
+        # SwipeGesture::cancelled to action->trigger() -- i.e. upstream
+        # KWin completes the bound action (switching desktops) on ANY
+        # recognized swipe release in the right direction, even one that
+        # fell way short of s_minimumDelta and was reported as
+        # "cancelled". A ~2mm accidental twitch and a full ~23mm
+        # deliberate swipe both switched desktops identically; the short
+        # one just skipped almost the entire live preview and forced the
+        # rest through as an instant catch-up snap, which is what read as
+        # absurdly fast ("1000% speed"). ./patches/kwin-gesture-no-cancel-
+        # trigger.patch drops that cancelled connection for the
+        # swipe-shortcut case (pinch left alone -- not what was reported),
+        # so only a swipe that genuinely reaches s_minimumDelta (stock
+        # 200, ~23mm real) switches desktops at all; anything short of
+        # that now truly does nothing, matching what it showed live
+        # during the drag instead of snapping.
+        #
+        # The unrelated, separate cause of horizontal-vs-vertical *speed*
+        # asymmetry (single-axis-only progress after the axis-lock in
+        # updateSwipeGesture, discarding any off-axis motion) was left
+        # alone -- a bigger, riskier behavioral change than this, not
+        # attempted yet.
         kwin = prev.kdePackages.kwin.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
-            ./patches/kwin-gesture-min-delta.patch
+            ./patches/kwin-gesture-no-cancel-trigger.patch
           ];
         });
       };

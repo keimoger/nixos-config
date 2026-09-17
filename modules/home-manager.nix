@@ -36,10 +36,6 @@
           # below), Meta+Alt+L/H came from a friend's exported shortcut
           # scheme (~/Desktop/keiboardshortcuts.kksrc) -- either combo
           # now triggers the same action.
-          "Switch to Next Desktop" = [
-            "Ctrl+Alt+Right"
-            "Meta+Alt+L"
-          ];
           "Switch to Previous Desktop" = [
             "Ctrl+Alt+Left"
             "Meta+Alt+H"
@@ -59,6 +55,22 @@
             "Alt+F4"
             "Meta+Q"
           ];
+
+          # Cleared stock defaults that collided with imported/Krohnkite
+          # bindings on the exact same key (found by diffing every bound
+          # key in the live kglobalshortcutsrc for duplicates):
+          #   - "Overview" (native KWin action) vs "Cycle Overview"
+          #     below, both Meta+W -- keeping Cycle Overview.
+          #   - "Show Desktop" vs plasmashell's "activate application
+          #     launcher", both Meta+D -- keeping the launcher.
+          #   - KrohnkiteTileLayout vs KrohnkiteStairLayout below, both
+          #     Meta+T -- Krohnkite ships Tile=Meta+T as its own built-in
+          #     default, which doesn't get cleared just because a
+          #     different Krohnkite action was separately bound to the
+          #     same key -- keeping Stair (the deliberately-imported one).
+          "Overview" = "none";
+          "Show Desktop" = "none";
+          "KrohnkiteTileLayout" = "none";
 
           # --- everything below imported from a friend's exported KDE
           # shortcut scheme (~/Desktop/keiboardshortcuts.kksrc) ---
@@ -146,8 +158,8 @@
           "KrohnkiteGrowHeight" = "Meta+Ctrl+J";
           "KrohnkiteIncrease" = "Meta+I";
           "KrohnkiteMonocleLayout" = "Meta+F";
-          "KrohnkiteNextLayout" = "Meta+\\";
-          "KrohnkitePreviousLayout" = "Meta+|";
+          "KrohnkiteNextLayout" = "Meta+N";
+          "KrohnkitePreviousLayout" = "Meta+Shift+N";
           "KrohnkiteRotate" = "Meta+R";
           "KrohnkiteRotatePart" = "Meta+Shift+R";
           "KrohnkiteSetMaster" = "Meta+Return";
@@ -173,6 +185,19 @@
         shortcuts.plasmashell = {
           "manage activities" = "none";
           "activate application launcher" = "Meta+D";
+
+          # Stock defaults, colliding with kwin's "Switch to Desktop N"
+          # (Meta+1..9) above -- nobody deliberately bound these, kept
+          # desktop-switching instead.
+          "activate task manager entry 1" = "none";
+          "activate task manager entry 2" = "none";
+          "activate task manager entry 3" = "none";
+          "activate task manager entry 4" = "none";
+          "activate task manager entry 5" = "none";
+          "activate task manager entry 6" = "none";
+          "activate task manager entry 7" = "none";
+          "activate task manager entry 8" = "none";
+          "activate task manager entry 9" = "none";
           "clipboard_action" = "Meta+Ctrl+X";
           "cycle-panels" = [
             "Meta+Ctrl+P"
@@ -364,40 +389,68 @@
       # Mission Control than "Overview", which is per-window instead of
       # per-desktop) per preference, not the map's literal direction names.
       home.activation.openlogiGestureBindings = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        configFile="$HOME/.config/openlogi/config.toml"
-        if [ -f "$configFile" ]; then
-          ${pkgs.python3}/bin/python3 - "$configFile" <<'PYEOF'
-import re
-import sys
+                configFile="$HOME/.config/openlogi/config.toml"
+                if [ -f "$configFile" ]; then
+                  ${pkgs.python3}/bin/python3 - "$configFile" <<'PYEOF'
+        import re
+        import sys
 
-path = sys.argv[1]
-with open(path) as f:
-    text = f.read()
+        path = sys.argv[1]
+        with open(path) as f:
+            text = f.read()
 
-device = 'direct:046d:b042:serial:2543apyjhv18'
-shortcuts = {
-    "Up": "Switch One Desktop Down",
-    "Down": "Switch One Desktop Up",
-    "Left": "Switch One Desktop to the Right",
-    "Right": "Switch One Desktop to the Left",
-    "Click": "Grid View",
-}
+        device = 'direct:046d:b042:serial:2543apyjhv18'
+        shortcuts = {
+            "Up": "Switch One Desktop Down",
+            "Down": "Switch One Desktop Up",
+            "Left": "Switch One Desktop to the Right",
+            "Right": "Switch One Desktop to the Left",
+            "Click": "Grid View",
+        }
 
-for direction, shortcut in shortcuts.items():
-    header = f'[devices."{device}".bindings.GestureButton.{direction}]'
-    line = (
-        'RunShellCommand = "/run/current-system/sw/bin/qdbus '
-        f"org.kde.kglobalaccel /component/kwin invokeShortcut '{shortcut}'\""
-    )
-    pattern = re.escape(header) + r"\n[^\n]*\n"
-    text, n = re.subn(pattern, header + "\n" + line + "\n", text)
-    if n != 1:
-        sys.exit(f"openlogiGestureBindings: expected exactly one match for {direction!r}, got {n}")
+        for direction, shortcut in shortcuts.items():
+            header = f'[devices."{device}".bindings.GestureButton.{direction}]'
+            line = (
+                'RunShellCommand = "/run/current-system/sw/bin/qdbus '
+                f"org.kde.kglobalaccel /component/kwin invokeShortcut '{shortcut}'\""
+            )
+            pattern = re.escape(header) + r"\n[^\n]*\n"
+            text, n = re.subn(pattern, header + "\n" + line + "\n", text)
+            if n != 1:
+                sys.exit(f"openlogiGestureBindings: expected exactly one match for {direction!r}, got {n}")
 
-with open(path, "w") as f:
-    f.write(text)
-PYEOF
-        fi
+        with open(path, "w") as f:
+            f.write(text)
+        PYEOF
+                fi
       '';
+
+      # ibus-daemon: modules/locale.nix's `i18n.inputMethod` enables and
+      # installs ibus, but its own autostart .desktop file ships
+      # `NotShowIn=GNOME;KDE` -- its comment defers to "KDE will launch
+      # ibus from kwin if enabled in keyboard -> virtual keyboard", a GUI
+      # toggle that isn't tracked anywhere in this config, and was never
+      # actually turned on. Without an IME running, nothing intercepts
+      # the Ctrl+Shift+U hex-codepoint sequence Plover falls back to for
+      # any character outside the active keyboard layout, so the raw hex
+      # leaks through as literal keystrokes instead of the real character
+      # (see modules/plover.nix). Owning the daemon here means it starts
+      # every session regardless of KDE's toggle -- confirmed working via
+      # the exact same binary+flags, started by hand, during the session
+      # this was diagnosed in.
+      systemd.user.services.ibus-daemon = {
+        Unit = {
+          Description = "IBus input method daemon";
+          PartOf = [ "graphical-session.target" ];
+          After = [ "graphical-session.target" ];
+        };
+        Service = {
+          ExecStart = "/run/current-system/sw/bin/ibus-daemon --xim --replace";
+          Restart = "on-failure";
+        };
+        Install = {
+          WantedBy = [ "graphical-session.target" ];
+        };
+      };
     };
 }

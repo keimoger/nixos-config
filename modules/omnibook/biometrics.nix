@@ -94,4 +94,32 @@
   # configure` once after rebooting to actually probe and save the
   # working command (interactive, must be run by the user).
   services.linux-enable-ir-emitter.enable = true;
+
+  # This only needs to run once per boot/resume (it's triggered by
+  # suspend/hibernate targets too, see the unit's own After=/WantedBy=)
+  # -- it's already successfully on for the running session.
+  #
+  # restartIfChanged=false alone wasn't enough (still failed on the
+  # next switch after this was added) -- it only skips restarting a
+  # unit that's currently *active*. Once the vendor UVC control write
+  # fails once, the unit sits in "failed" (i.e. inactive) state, and
+  # the *next* switch sees "this should be up per WantedBy= but isn't"
+  # and starts it fresh -- a plain start, not a restart, so that flag
+  # never applies once it's failed even a single time. Kept anyway
+  # since it's harmless and still correct for a currently-active unit.
+  #
+  # The saved state at /var/lib/linux-enable-ir-emitter already shows
+  # the "on" instruction as the device's current value -- it's already
+  # correctly enabled from whenever it last actually succeeded. This
+  # failure is the tool trying to redundantly re-apply that same
+  # already-set value and having the hardware reject the write (a
+  # known class of flakiness with vendor UVC extension-unit controls,
+  # not a real functional problem) -- no CLI flag exists to make the
+  # tool skip an already-applied value (checked --help), so rather
+  # than patch a compiled Go binary for this, exit code 1 is just
+  # accepted as this unit's definition of success.
+  systemd.services.linux-enable-ir-emitter = {
+    restartIfChanged = false;
+    serviceConfig.SuccessExitStatus = [ 1 ];
+  };
 }

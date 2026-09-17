@@ -1,0 +1,24 @@
+--- pristine/src/globalshortcuts.cpp	2026-09-08 14:53:35.000000000 +0400
++++ working/src/globalshortcuts.cpp	2026-09-17 19:56:41.390901832 +0400
+@@ -37,7 +37,20 @@
+         m_swipeGesture = std::make_unique<SwipeGesture>(swipeGesture->fingerCount);
+         m_swipeGesture->setDirection(swipeGesture->direction);
+         QObject::connect(m_swipeGesture.get(), &SwipeGesture::triggered, m_action, &QAction::trigger, Qt::QueuedConnection);
+-        QObject::connect(m_swipeGesture.get(), &SwipeGesture::cancelled, m_action, &QAction::trigger, Qt::QueuedConnection);
++        // NOTE: upstream also connects SwipeGesture::cancelled to
++        // action->trigger() here -- meaning ANY recognized swipe in the
++        // right direction completes the bound action (e.g. switches
++        // virtual desktop) on release, regardless of how little distance
++        // was actually covered; SwipeGesture::s_minimumDelta then only
++        // controls how much of the live progress preview you see before
++        // that unconditional commit, not whether it happens at all. That
++        // makes a short, fast swipe look like it completes an entire
++        // transition almost instantly (a forced catch-up "snap" for
++        // whatever fraction of progress wasn't shown live). Dropped here
++        // so only a swipe that actually reaches s_minimumDelta -- a real,
++        // enforced minimum distance -- triggers the action; anything
++        // short of that now genuinely does nothing, same as it visually
++        // showed during the drag.
+         if (swipeGesture->progressCallback) {
+             QObject::connect(m_swipeGesture.get(), &SwipeGesture::progress, m_swipeGesture.get(), swipeGesture->progressCallback);
+         }

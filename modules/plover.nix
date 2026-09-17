@@ -17,6 +17,20 @@ let
     buildInputs = [ basePlover ];
   };
 
+  # `{:altcase:<letter>}` / `{:altcase_retro}` metas: alternating-case
+  # fingerspelling glue (sOmEtHiNg) alongside Lapwing's existing -FPLT/*FPLT
+  # (case glue) and -RBGS (stitch) suffixes, plus a retroactive re-case of
+  # the last word via the bare -RBLT stroke. See ~/projects/plover-altcase
+  # and plover/altcase.json.
+  plover-altcase = pkgs.python3Packages.buildPythonPackage {
+    pname = "plover-altcase";
+    version = "0.1.0";
+    src = inputs.plover-altcase;
+    pyproject = true;
+    build-system = [ pkgs.python3Packages.setuptools ];
+    buildInputs = [ basePlover ];
+  };
+
   ploverPkg = basePlover.withPlugins (plugins: [
     plugins.plover-lapwing-aio
     plugins.plover-python-dictionary
@@ -28,6 +42,7 @@ let
     plugins.plover-tapey-tape
     # Add any specific plugin exposed by the flake
     plover-russian-firebird
+    plover-altcase
   ]);
 in
 {

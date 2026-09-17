@@ -71,8 +71,11 @@ in
   # what actually makes the theme directory show up where sddm looks.
   services.displayManager.sddm.extraPackages = [ greeterTheme ];
   services.displayManager.sddm.theme = "breeze-custom-wallpaper";
-  environment.systemPackages = [ greeterTheme ];
-  services.desktopManager.lomiri.enable = true;
+  environment.systemPackages = [
+    greeterTheme
+    pkgs.libreoffice
+  ];
+  # services.desktopManager.lomiri.enable = true;
   services.xserver.displayManager.lightdm.enable = false;
 
   services.desktopManager.plasma6.enable = true;

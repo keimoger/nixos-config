@@ -9,16 +9,23 @@
   # didn't belong in that file once it needed real tuning instead of
   # just "be maximally conservative").
   #
-  # 2 jobs x 4 cores each keeps the same worst-case total thread count
-  # as the old 1-job setup would've had access to (up to 8), but
-  # spreads it across two derivations instead of letting one giant
-  # compile (e.g. a single heavy Qt/KDE package) claim every core and
-  # a correspondingly large slice of RAM at once -- lets independent
-  # small derivations (there were dozens queued up when this got
-  # tuned, see the plasma-*.drv pile from the cursor-accel rebuild)
-  # actually build concurrently instead of strictly serialized.
-  nix.settings.max-jobs = 2;
-  nix.settings.cores = 4;
+  # Was max-jobs=2 / cores=4 -- split this way so two mid-size
+  # derivations could build concurrently instead of one giant compile
+  # (e.g. a single heavy Qt/KDE package) claiming every core and a
+  # correspondingly large slice of RAM at once, back when there were
+  # dozens of small derivations queued at once (the plasma-*.drv pile
+  # from the cursor-accel rebuild). In practice most rebuilds since
+  # then have been a single big package (kwin, breeze, ...) with
+  # nothing else ready to build alongside it -- so that single job
+  # only ever got 4 of this CPU's 8 logical cores (all landing on the
+  # 4 P-cores specifically; Linux's hybrid scheduler fills P-cores
+  # before spilling to E-cores), leaving the 4 E-cores idle for the
+  # whole build. max-jobs=1 / cores=8 gives a single job the entire
+  # machine instead. Trade-off: if two mid-size derivations ever do
+  # become ready at once again, they'll now serialize instead of
+  # overlapping -- accepted, since that's been the rarer case lately.
+  nix.settings.max-jobs = 1;
+  nix.settings.cores = 8;
 
   # Compressed RAM-backed swap -- the actual OOM safety net for the
   # parallelism above. The only swap that existed before this was a
@@ -36,6 +43,25 @@
     enable = true;
     memoryPercent = 50;
   };
+
+  # Dedicated hibernation swap -- a new 16GB partition (nvme0n1p8),
+  # carved out of freed space from shrinking the Windows partition.
+  # zram above can't serve this role: it's backed by RAM itself, so its
+  # contents vanish the instant power is cut, which is exactly what
+  # hibernation needs to survive. This needs to be a real, persistent,
+  # disk-backed area at least as big as RAM (15GB here) to hold a full
+  # memory image. No priority set, matching the existing disk swap
+  # entry in hardware-configuration.nix -- everyday swap pressure still
+  # goes to zram first; this partition is really only meant to be
+  # written to right before a hibernate.
+  swapDevices = [
+    { device = "/dev/disk/by-uuid/e77618dc-1791-4723-bd7e-292617b45362"; }
+  ];
+
+  # Points systemd-hibernate-resume (boot.initrd.systemd.enable above)
+  # at the hibernation swap partition, so a resume image left there by
+  # a previous hibernate is found and restored on the next boot.
+  boot.resumeDevice = "/dev/disk/by-uuid/e77618dc-1791-4723-bd7e-292617b45362";
 
   # Secure Boot via lanzaboote. It builds on top of systemd-boot, so
   # systemd-boot itself stays "enabled" for its generation-management
