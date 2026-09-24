@@ -3,17 +3,28 @@
 # deliberately NOT running Nix on that machine's actual host OS (kept
 # entirely inside a Docker container there instead, per its owner's
 # preference), just a plain SSH-reachable Nix daemon as far as this
-# config is concerned. Works whether reached over the LAN directly or
-# via Tailscale while away, since Tailscale negotiates a direct
-# peer-to-peer path automatically when both ends are already on the
-# same LAN -- same address either way, no conditional config needed.
+# config is concerned. The configured address is a LAN address; remote
+# access requires a route to that LAN (for example a Tailscale subnet
+# router). Merely enabling Tailscale does not make this address reachable.
 #
 # The SSH key was generated specifically for this (not this user's
 # regular key) -- private half lives at ~/.ssh/nix-remote-builder,
 # never committed; only the path is referenced here.
 { ... }:
 {
-  nix.distributedBuilds = false;
+  # Was off for a while in favor of build-nix.nu's hand-picked
+  # "heavy" package list -- that was a workaround for the remote
+  # box's limited disk, not a preference: distributed builds send
+  # *everything* Nix needs to build (including, it turns out, whole
+  # dependency cascades from a single low-level patch -- e.g.
+  # powerdevil rebuilding because it's built against plasma-workspace,
+  # which is built against kwin, which is built against libinput),
+  # not just a hardcoded list, which is what "heavy" mode couldn't do
+  # and why it kept silently falling back to full local rebuilds.
+  # Re-enabled on the understanding that the disk-space side needs
+  # its own fix (see the remote-gc entry -- TODO once decided) rather
+  # than staying off indefinitely.
+  nix.distributedBuilds = true;
   nix.buildMachines = [
     {
       # There's no dedicated port field on this submodule (checked the

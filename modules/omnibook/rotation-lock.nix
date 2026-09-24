@@ -30,61 +30,13 @@
 # one or the other permanently.
 { pkgs, ... }:
 let
-  # Full teardown of the whole chain, leaves first. An earlier, lighter
-  # version of this script left hid_sensor_hub and its leaf drivers
-  # loaded (reasoning: they're plain HID-bus drivers that should
-  # auto-rebind once the transport comes back) -- that worked once,
-  # then failed on a later attempt (kscreen fell back to "incapable"
-  # and iio-sensor-proxy reported "undefined" after resume), so it
-  # wasn't reliable enough to leave as-is. Tearing everything down
-  # explicitly and rebuilding it below is slower but has been the only
-  # version that's come back clean every time tested.
-  ishSuspend = pkgs.writeShellScript "ish-sensor-suspend" ''
-    set -e
-    if [ -e /sys/bus/pci/drivers/intel_ish_ipc/0000:00:12.0 ]; then
-      echo 0000:00:12.0 > /sys/bus/pci/drivers/intel_ish_ipc/unbind
-    fi
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_custom_intel_hinge || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_magn_3d || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_prox || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_gyro_3d || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_custom || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_rotation || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_accel_3d || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_incl_3d || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_trigger || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_iio_common || true
-    ${pkgs.kmod}/bin/modprobe -r hid_sensor_hub || true
-    ${pkgs.kmod}/bin/modprobe -r kfifo_buf || true
-    ${pkgs.kmod}/bin/modprobe -r industrialio || true
-    ${pkgs.kmod}/bin/modprobe -r intel_ishtp_hid || true
-    ${pkgs.kmod}/bin/modprobe -r intel_ishtp_loader || true
-    ${pkgs.kmod}/bin/modprobe -r intel_ish_ipc || true
-    ${pkgs.kmod}/bin/modprobe -r intel_ishtp || true
-  '';
-
-  ishResume = pkgs.writeShellScript "ish-sensor-resume" ''
-    set -e
-    ${pkgs.kmod}/bin/modprobe intel_ishtp
-    ${pkgs.kmod}/bin/modprobe intel_ish_ipc
-    ${pkgs.kmod}/bin/modprobe intel_ishtp_loader || true
-    ${pkgs.kmod}/bin/modprobe intel_ishtp_hid || true
-    ${pkgs.kmod}/bin/modprobe industrialio || true
-    ${pkgs.kmod}/bin/modprobe kfifo_buf || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_iio_common || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_trigger || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_hub || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_accel_3d || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_incl_3d || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_rotation || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_custom || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_gyro_3d || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_prox || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_magn_3d || true
-    ${pkgs.kmod}/bin/modprobe hid_sensor_custom_intel_hinge || true
-    sleep 1
-    ${pkgs.systemd}/bin/systemctl restart iio-sensor-proxy
-  '';
+  # ishSuspend/ishResume themselves now live in ish-sensor-scripts.nix,
+  # shared with ish-resume-hook.nix's automatic post-resume recovery --
+  # see that file's header comment for why an automatic hook exists at
+  # all (a real ISH firmware bug, unrelated to rotation-lock).
+  ish = import ./ish-sensor-scripts.nix { inherit pkgs; };
+  ishSuspend = ish.ishSuspend;
+  ishResume = ish.ishResume;
 
   pythonWithDbus = pkgs.python3.withPackages (ps: [ ps.dbus-next ]);
 
@@ -361,26 +313,11 @@ let
   '';
 in
 {
-  # Scoped precisely to these two exact, content-addressed script
-  # paths -- not a broad NOPASSWD grant. Nix store immutability means
-  # this rule can't be tricked into running anything else by editing
-  # the target file; a content change produces a different store path
-  # and this rule would need to be rebuilt to match it.
-  security.sudo.extraRules = [
-    {
-      users = [ "keimoger" ];
-      commands = [
-        {
-          command = "${ishSuspend}";
-          options = [ "NOPASSWD" ];
-        }
-        {
-          command = "${ishResume}";
-          options = [ "NOPASSWD" ];
-        }
-      ];
-    }
-  ];
+  # security.sudo.extraRules for ishSuspend/ishResume (used by the tray
+  # toggle below) lives in ish-resume-hook.nix now, alongside
+  # powerManagement.resumeCommands -- both cover the exact same two
+  # scripts, imported identically from ish-sensor-scripts.nix, so one
+  # shared rule there covers this file's use of them too.
 
   systemd.user.services.rotation-lock-tray = {
     description = "System tray toggle for screen/touchpad auto-rotation and keyboard-on-rotation trade-off";

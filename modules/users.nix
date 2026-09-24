@@ -2,11 +2,11 @@
 {
   # See modules/davinci-resolve-package.nix for why this is needed --
   # nixpkgs' own pinned download hash for it is currently stale.
-  nixpkgs.overlays = [
-    (final: prev: {
-      davinci-resolve = final.callPackage ./davinci-resolve-package.nix { };
-    })
-  ];
+  # nixpkgs.overlays = [
+  #   (final: prev: {
+  #     davinci-resolve = final.callPackage ./davinci-resolve-package.nix { };
+  #   })
+  # ];
 
   users.users."keimoger" = {
     isNormalUser = true;
@@ -66,7 +66,7 @@
         ];
       }))
       pkgs.krita
-      davinci-resolve
+      # davinci-resolve
     ];
   };
 
@@ -75,6 +75,17 @@
 
   services.udev.extraRules = ''
     KERNEL=="uinput", MODE="0660", GROUP="uinput", OPTIONS+="static_node=uinput"
-    KERNEL=="hidraw*", SUBSYSTEM=="hidraw", MODE="0666", TAG+="uaccess"
   '';
+
+  # Grant raw HID access to the active local session, rather than every
+  # local user. Run before systemd's 73-seat-late.rules applies the ACL.
+  services.udev.packages = [
+    (pkgs.writeTextFile {
+      name = "local-hidraw-access";
+      destination = "/etc/udev/rules.d/70-local-hidraw.rules";
+      text = ''
+        SUBSYSTEM=="hidraw", KERNEL=="hidraw*", MODE="0660", TAG+="uaccess"
+      '';
+    })
+  ];
 }

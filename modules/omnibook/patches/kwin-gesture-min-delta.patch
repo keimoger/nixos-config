@@ -1,0 +1,11 @@
+--- pristine/src/gestures.h	2026-09-08 14:53:35.000000000 +0400
++++ working/src/gestures.h	2026-09-17 23:45:25.825512634 +0400
+@@ -51,7 +51,7 @@
+     Q_OBJECT
+ 
+ public:
+-    static constexpr double s_minimumDelta = 200;
++    static constexpr double s_minimumDelta = 600;
+ 
+     explicit SwipeGesture(uint32_t fingerCount);
+     ~SwipeGesture() override;

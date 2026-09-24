@@ -50,6 +50,13 @@
 
   nixpkgs.config.allowUnfree = true;
 
+  # Root, home, and nix share one Btrfs filesystem; scrub it once monthly.
+  services.btrfs.autoScrub = {
+    enable = true;
+    fileSystems = [ "/" ];
+    interval = "monthly";
+  };
+
   # This value determines the NixOS release from which the default
   # settings for stateful data were taken. Leave this at the release
   # version of the first install of this system — do not bump it when

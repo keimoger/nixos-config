@@ -2,6 +2,16 @@
 {
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
+  # Lets this user `nix copy` store paths built on the remote builder
+  # (modules/remote-builder.nix) straight into the local store. Without
+  # this, nix-daemon refuses them with "lacks a signature by a trusted
+  # key" -- paths built elsewhere aren't signed by anything the daemon
+  # already trusts, and only a trusted user is allowed to import
+  # unsigned paths directly. Single-user laptop, so this is simpler
+  # than setting up a real signing keypair (trusted-public-keys) for
+  # what's effectively a one-machine trust boundary anyway.
+  nix.settings.trusted-users = [ "keimoger" ];
+
   # Build parallelism, tuned for this laptop's 8 logical cores / 15GB RAM.
   # Was max-jobs=1 (previously lived in modules/omnibook/touchpad.nix,
   # added alongside the libinput patch overlay there -- but this is a

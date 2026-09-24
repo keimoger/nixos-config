@@ -31,6 +31,19 @@
 #                          automatically in tablet mode (this being a
 #                          convertible), reverting to plain Plasma
 #                          defaults otherwise
+#   presence-screen.nix -- Windows-style presence sensing: turns the
+#                          screen off when nobody's in front of the
+#                          laptop (this exact ISH proximity sensor via
+#                          iio-sensor-proxy), back on the moment
+#                          someone is again
+#   ish-sensor-scripts.nix -- shared ishSuspend/ishResume recovery
+#                          scripts (not a module by itself -- imported
+#                          by both files below)
+#   ish-resume-hook.nix -- runs those scripts automatically after every
+#                          real system resume, working around a real
+#                          ISH firmware bug where proximity/attention
+#                          sensor reports silently stop updating after
+#                          a normal light (s2idle/D0i3) suspend
 {
   imports = [
     ./sensors.nix
@@ -40,5 +53,7 @@
     ./biometrics.nix
     # ./copilot-key.nix
     ./touch-mode-ui.nix
+    ./presence-screen.nix
+    ./ish-resume-hook.nix
   ];
 }

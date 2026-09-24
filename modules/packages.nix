@@ -111,6 +111,7 @@ in
     sbctl
     git
     gh
+    codex
     helix
     nixd
     nixfmt
@@ -120,7 +121,9 @@ in
     anydesk
     nix-output-monitor
     jetbrains.idea
-    android-studio
+    bun
+    pkgs.bubblewrap
+    # android-studio
   ];
 
   # btop's own "show_cpu_watts" (on by default) reads

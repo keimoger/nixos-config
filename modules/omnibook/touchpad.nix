@@ -117,54 +117,109 @@ in
       kdePackages = prev.kdePackages // {
         # KWin's swipe-gesture completion distance (src/gestures.cpp's
         # SwipeGesture::deltaToProgress, dividing by the hardcoded
-        # constant SwipeGesture::s_minimumDelta = 200) is not exposed
-        # via any config file or settings UI. The delta it divides comes
-        # straight from libinput's gesture_get_d{x,y}_unaccelerated.
+        # constant SwipeGesture::s_minimumDelta) is not exposed via any
+        # config file or settings UI. The delta it divides comes
+        # straight from libinput's gesture_get_d{x,y}_unaccelerated,
+        # which is raw sensor units, not mm -- directly measured live
+        # via `libinput debug-events` on a real edge-to-edge swipe
+        # across this touchpad's known ~135mm width: cumulative
+        # unaccelerated delta summed to ~1184, i.e. ~8.8 units/mm.
         #
-        # An earlier version of this comment claimed that value was
-        # genuinely millimeters (based on this touchpad's ABS_MT_POSITION
-        # resolution reading 12 units/mm) and that stock 200 was larger
-        # than the touchpad's own 158mm diagonal, so it patched
-        # s_minimumDelta down to 20 to make gestures completable at all.
-        # That confused "this device's resolution is 12 units/mm" with
-        # "the reported delta values are already in mm" -- they're not;
-        # they're raw sensor units, so mm = delta / ~9-12. Directly
-        # measured live via `libinput debug-events` on a real edge-to-edge
-        # swipe across this touchpad's known ~135mm width: cumulative
-        # unaccelerated delta summed to ~1184, i.e. ~8.8 units/mm --
-        # confirming it's raw sensor units, not mm. Under that corrected
-        # ratio, stock 200 is only ~23mm of real travel: a perfectly
-        # normal, comfortable single swipe, not remotely close to
-        # physically impossible on this hardware. The real problem was
-        # never this constant -- see below -- so it's back to stock
-        # (no patch needed for this part at all).
+        # Two earlier, WRONG attempts at this, left here so the actual
+        # mechanism (below) doesn't get "fixed" back into either of
+        # them again:
+        #   1) Patched s_minimumDelta down to 20, on the mistaken belief
+        #      the delta values were literally mm and stock 200 (a real
+        #      ~23mm at the measured ratio) exceeded this touchpad's
+        #      158mm diagonal. It doesn't, and that was never the issue.
+        #   2) Patched src/globalshortcuts.cpp's GlobalShortcut
+        #      constructor to stop connecting SwipeGesture::cancelled to
+        #      action->trigger() (upstream connects BOTH triggered AND
+        #      cancelled there), on the theory that was a bug letting
+        #      any swipe complete regardless of distance. It isn't a
+        #      bug: connecting cancelled too is what lets
+        #      VirtualDesktopManager::gestureReleasedX/Y (the actual
+        #      slot on the other end, shared by all 4
+        #      registerTouchpadSwipeShortcut calls for left/right/up/
+        #      down) run on EVERY release, complete or not, so it can
+        #      make its own correct pass/fail call using its own
+        #      GESTURE_SWITCH_THRESHOLD (see below) and properly revert
+        #      the live preview (Q_EMIT currentChangingCancelled())
+        #      when the swipe fell short. Blocking cancelled->trigger()
+        #      meant that revert logic stopped running at all for any
+        #      swipe under s_minimumDelta -- neither completing nor
+        #      reverting -- leaving the live desktop-slide preview
+        #      visibly stuck wherever the drag left off.
         #
-        # The actual bug: src/globalshortcuts.cpp's GlobalShortcut
-        # constructor connects BOTH SwipeGesture::triggered AND
-        # SwipeGesture::cancelled to action->trigger() -- i.e. upstream
-        # KWin completes the bound action (switching desktops) on ANY
-        # recognized swipe release in the right direction, even one that
-        # fell way short of s_minimumDelta and was reported as
-        # "cancelled". A ~2mm accidental twitch and a full ~23mm
-        # deliberate swipe both switched desktops identically; the short
-        # one just skipped almost the entire live preview and forced the
-        # rest through as an instant catch-up snap, which is what read as
-        # absurdly fast ("1000% speed"). ./patches/kwin-gesture-no-cancel-
-        # trigger.patch drops that cancelled connection for the
-        # swipe-shortcut case (pinch left alone -- not what was reported),
-        # so only a swipe that genuinely reaches s_minimumDelta (stock
-        # 200, ~23mm real) switches desktops at all; anything short of
-        # that now truly does nothing, matching what it showed live
-        # during the drag instead of snapping.
+        # What's actually true: src/virtualdesktops.cpp defines its OWN
+        # separate constant, GESTURE_SWITCH_THRESHOLD = 0.25, and
+        # gestureReleasedX/Y complete the switch once the live-tracked
+        # offset (itself a 0..1 fraction of s_minimumDelta, fed
+        # continuously during the drag via the registerTouchpadSwipeShortcut
+        # progress callback) crosses +-0.25 -- i.e. the REAL commit
+        # point was always 25% of s_minimumDelta, not s_minimumDelta
+        # itself. At stock 200 that's 50 raw units, ~5.7mm at the
+        # measured ratio -- which is exactly the "just 5mm" swipe this
+        # whole investigation started from. Not a bug anywhere; a
+        # 25%-of-total commit distance is a completely ordinary
+        # swipe-to-commit UX pattern (same idea as a page-flip gesture
+        # completing before you've dragged the whole way) -- it just
+        # reads as way too twitchy at this touchpad's calibrated ratio
+        # with stock's 200.
+        #
+        # Fix: raise s_minimumDelta itself (600, patched below) rather
+        # than touch GESTURE_SWITCH_THRESHOLD's fraction directly --
+        # since the commit point scales proportionally with it, this
+        # requires more deliberate real travel to commit (~17mm instead
+        # of ~5.7mm) while also giving the live slide preview more
+        # visual room over that distance, instead of covering most of
+        # the screen in the first twitchy few mm.
         #
         # The unrelated, separate cause of horizontal-vs-vertical *speed*
         # asymmetry (single-axis-only progress after the axis-lock in
         # updateSwipeGesture, discarding any off-axis motion) was left
         # alone -- a bigger, riskier behavioral change than this, not
         # attempted yet.
+        #
+        # Follow-up: 25% of s_minimumDelta (now 600) still felt like more
+        # commit travel than expected, then .15 (~10mm) still needed
+        # tuning further, then a direct side-by-side comparison against
+        # real macOS landed on 1/17 (~5.9%, ~4mm) as a match -- three
+        # separate full KWin rebuilds just to try three numbers.
+        # ./patches/kwin-gesture-switch-threshold.patch removes the
+        # GESTURE_SWITCH_THRESHOLD compile-time constant entirely and
+        # replaces it with VirtualDesktopManager::gestureSwitchThreshold(),
+        # which reads kwinrc's [Gestures] SwitchDesktopThreshold key
+        # (falling back to 1/17 if unset) fresh on every gesture release
+        # -- so any *future* retuning is just `kwriteconfig6 --file
+        # kwinrc --group Gestures --key SwitchDesktopThreshold <value>`
+        # + `qdbus org.kde.KWin /KWin reconfigure` (or a relogin), no
+        # rebuild required. s_minimumDelta (and so the live-preview's
+        # overall visual range) is untouched by this -- this constant
+        # only moves *where within that same swipe* it commits, not how
+        # far the live slide travels overall.
+        #
+        # Follow-up: this only ever covered desktop switching
+        # (VirtualDesktopManager::gestureReleasedX/Y specifically). A
+        # 4-finger swipe down (Overview's "grid view") needed almost the
+        # entire swipe distance to commit despite all of the above,
+        # because it's a completely different code path:
+        # src/plugins/overview/overvieweffect.cpp registers it via
+        # EffectTogglableGesture::addTouchpadSwipeGesture, which lands in
+        # src/effect/effecttogglablestate.cpp's EffectTogglableState --
+        # the shared base class behind Overview's (and potentially other
+        # effects') touchpad-gesture toggling, entirely separate from
+        # VirtualDesktopManager. It had its OWN hardcoded 50% commit
+        # threshold (m_partialActivationFactor > 0.5), never touched by
+        # the above. ./patches/kwin-gesture-partial-activation-threshold.patch
+        # externalizes that one too, the same way and to the same
+        # [Gestures] kwinrc group (key: PartialActivationThreshold,
+        # default 0.5 if unset).
         kwin = prev.kdePackages.kwin.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
-            ./patches/kwin-gesture-no-cancel-trigger.patch
+            ./patches/kwin-gesture-min-delta.patch
+            ./patches/kwin-gesture-switch-threshold.patch
+            ./patches/kwin-gesture-partial-activation-threshold.patch
           ];
         });
       };

@@ -55,6 +55,19 @@
 -- exact on-screen pacing of an already-superseded hop changes).
 --
 -- Lives at /etc/libinput/plugins/60-touchpad-smoothing.lua.
+--
+-- Only applies to this specific low-resolution touchpad. GAIN_MAX and
+-- GAIN_TAPER_DELTA below were tuned entirely around this touchpad's own
+-- 12 units/mm native resolution -- confirmed live to cause "some weird
+-- shi" when it also ran on an Apple Magic Trackpad (measured much finer,
+-- ~44-47 units/mm): the same "6 raw unit" taper distance that covers
+-- slow, deliberate movement at 12 units/mm covers a much smaller physical
+-- distance at 44-47 units/mm, so the same gain curve engages at entirely
+-- the wrong physical scale on that device. Exact same class of bug
+-- already fixed once in libinput-macos-cursor-accel.patch (that one gated
+-- on accel_filter->dpi; this plugin gates on ABS_MT_POSITION_Y's own
+-- resolution instead, since that's what's actually available to a Lua
+-- plugin -- see scroll-inertia.lua for the same pattern).
 
 version = libinput:register({ 1 })
 
@@ -77,6 +90,12 @@ local MID_DELAY_US = 4000 -- delay before delivering the second half of a
 -- confirmed ~7-8ms poll interval, so the split
 -- lands between two real samples rather than
 -- competing with the next one.
+local MAX_RESOLUTION_UNITS_PER_MM = 20 -- devices reporting a finer native
+-- resolution than this are passed
+-- through completely untouched.
+-- Comfortably between this touchpad's
+-- 12 units/mm and the Magic
+-- Trackpad's 44-47.
 -- ---------------------------------------------------------------------
 
 local devices = {}
@@ -90,6 +109,8 @@ local function state_for(device)
 			last_x = nil,
 			last_y = nil, -- last REAL position we saw for this touch
 			pending = nil, -- second half of a split hop still owed, or nil
+			should_smooth = false, -- set once at connect time, based on
+			-- this device's own native resolution
 		}
 		devices[device] = st
 	end
@@ -126,7 +147,18 @@ end)
 libinput:connect("new-evdev-device", function(device)
 	local st = state_for(device)
 
+	local absinfos = device:absinfos()
+	local y_info = absinfos and absinfos[evdev.ABS_MT_POSITION_Y]
+	st.should_smooth = y_info ~= nil
+		and y_info.resolution ~= nil
+		and y_info.resolution > 0
+		and y_info.resolution <= MAX_RESOLUTION_UNITS_PER_MM
+
 	device:connect("evdev-frame", function(dev, frame, timestamp)
+		if not st.should_smooth then
+			return nil
+		end
+
 		local new_x, new_y
 		local touch_started = false
 
