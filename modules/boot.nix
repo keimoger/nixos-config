@@ -1,6 +1,9 @@
 { ... }:
 {
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 
   # Lets this user `nix copy` store paths built on the remote builder
   # (modules/remote-builder.nix) straight into the local store. Without
@@ -73,18 +76,51 @@
   # a previous hibernate is found and restored on the next boot.
   boot.resumeDevice = "/dev/disk/by-uuid/e77618dc-1791-4723-bd7e-292617b45362";
 
-  # Secure Boot via lanzaboote. It builds on top of systemd-boot, so
-  # systemd-boot itself stays "enabled" for its generation-management
-  # options, but its own bootloader install step is disabled in favor
-  # of lanzaboote's signed one.
+  # Limine provides a graphical boot menu while retaining Secure Boot.
+  # Lanzaboote is disabled here; its old signed systemd-boot installation
+  # remains on the ESP as a recovery path until Limine has been verified.
   boot.loader.systemd-boot = {
     enable = false;
     configurationLimit = 3; # keep only the 3 latest generations in /boot
   };
+
+  boot.loader.limine = {
+    enable = true;
+    efiSupport = true;
+    efiInstallAsRemovable = false;
+    maxGenerations = 3;
+    secureBoot.enable = true;
+    # Keep the existing Windows installation available from Limine.
+    extraEntries = ''
+      /Windows
+          protocol: efi_chainload
+          image_path: boot():///EFI/Microsoft/Boot/bootmgfw.efi
+    '';
+
+    style = {
+      interface = {
+        branding = "keibook";
+        brandingColor = "8AADF4";
+        helpColor = "A6DA95";
+        helpColorBright = "8BD5CA";
+      };
+      graphicalTerminal = {
+        foreground = "CAD3F5";
+        brightForeground = "FFFFFF";
+        background = "CC24273A";
+        brightBackground = "CC363A4F";
+        margin = 32;
+        marginGradient = 8;
+      };
+    };
+  };
+
+  # Keep the menu visible briefly without making every boot interactive.
+  boot.loader.timeout = 5;
   boot.loader.efi.canTouchEfiVariables = true;
 
   boot.lanzaboote = {
-    enable = true;
+    enable = false;
     pkiBundle = "/var/lib/sbctl";
     configurationLimit = 3;
   };

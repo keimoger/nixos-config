@@ -103,6 +103,10 @@ local TOUCHPAD_MIN_VELOCITY_TO_COAST_MM = 0.5 -- below this, treat as a
 local TOUCHPAD_MAX_VELOCITY_MM = 12 -- clamp so a very fast flick doesn't
 -- produce an unreasonably long coast
 local TOUCHPAD_STOP_THRESHOLD_MM = 0.05 -- below this, end the fake touch
+local TOUCHPAD_MAX_RESOLUTION_UNITS_PER_MM = 20 -- The internal Synaptics
+-- pad reports ~12 units/mm. Apple Magic Trackpads report ~44-47 and must
+-- remain untouched; synthetic contacts are only safe for the low-resolution
+-- device this plugin was tuned for.
 
 -- Plausible finger-sized contact values for the fake touches, sent once
 -- when each one starts. Real touch data includes these alongside
@@ -339,19 +343,25 @@ libinput:connect("new-evdev-device", function(device)
 	local absinfos = device:absinfos()
 	if absinfos and absinfos[evdev.ABS_MT_POSITION_Y] then
 		local y_info = absinfos[evdev.ABS_MT_POSITION_Y]
-		st.tp_resolution = y_info.resolution
-		if not st.tp_resolution or st.tp_resolution <= 0 then
-			st.tp_resolution = TOUCHPAD_RESOLUTION_FALLBACK
+		if y_info.resolution and y_info.resolution > 0
+			and y_info.resolution <= TOUCHPAD_MAX_RESOLUTION_UNITS_PER_MM then
+			st.tp_resolution = y_info.resolution
+		else
+			-- Finer devices, including the Apple Magic Trackpad, pass through
+			-- untouched. Do not synthesize tracking IDs for them.
+			st.tp_resolution = nil
 		end
-		st.tp_position_min_y = y_info.minimum
-		st.tp_position_max_y = y_info.maximum
+		if st.tp_resolution then
+			st.tp_position_min_y = y_info.minimum
+			st.tp_position_max_y = y_info.maximum
 
-		local id_info = absinfos[evdev.ABS_MT_TRACKING_ID]
-		st.tp_tracking_id_max = id_info and id_info.maximum
-		if not st.tp_tracking_id_max or st.tp_tracking_id_max <= 0 then
-			st.tp_tracking_id_max = 65535
+			local id_info = absinfos[evdev.ABS_MT_TRACKING_ID]
+			st.tp_tracking_id_max = id_info and id_info.maximum
+			if not st.tp_tracking_id_max or st.tp_tracking_id_max <= 0 then
+				st.tp_tracking_id_max = 65535
+			end
+			st.tp_next_tracking_id = math.floor(st.tp_tracking_id_max / 2)
 		end
-		st.tp_next_tracking_id = math.floor(st.tp_tracking_id_max / 2)
 	end
 
 	device:connect("evdev-frame", function(dev, frame, timestamp)

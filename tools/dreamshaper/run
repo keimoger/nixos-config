@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+export UV_PROJECT_ENVIRONMENT="${XDG_DATA_HOME:-$HOME/.local/share}/dreamshaper/venv"
+if [[ "${1:-}" == "--download" ]]; then
+  shift
+  exec systemd-run --user --scope --quiet \
+    -p MemoryHigh=7G -p MemoryMax=10G -p MemorySwapMax=2G \
+    uv run --locked --group export --project "$project_dir" \
+    python "$project_dir/export.py" "$@"
+fi
+exec systemd-run --user --scope --quiet \
+  -p MemoryHigh=7G -p MemoryMax=10G -p MemorySwapMax=2G \
+  uv run --locked --inexact --project "$project_dir" \
+  python "$project_dir/dreamshaper.py" "$@"

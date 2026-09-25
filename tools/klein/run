@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+project_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# Keep a large render from exhausting this 16 GB laptop's memory.
+exec systemd-run --user --scope --quiet \
+  -p MemoryHigh=7G -p MemoryMax=10G -p MemorySwapMax=2G \
+  uv run --locked --project "$project_dir" python "$project_dir/klein.py" "$@"

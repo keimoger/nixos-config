@@ -17,6 +17,8 @@ and plasma-manager. Dependency revisions are recorded in `flake.lock`.
 - `modules/omnibook/`: firmware, sensors, touchpad, graphics, biometrics,
   presence sensing, and tablet UI patches for this laptop.
 - `build-nix.nu`: local, remote, and selected-package build workflows.
+- `tools/klein/`: local FLUX.2 Klein image generation; see its README for usage.
+- `tools/dreamshaper/`: local DreamShaper 8 generation; see its README for usage.
 
 Removing the OmniBook import removes its customizations, but deploying to
 another machine also requires replacing hardware settings, host/user paths,

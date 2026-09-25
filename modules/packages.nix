@@ -44,6 +44,7 @@ let
         nix shell ...($pkgs | each {|p| $"nixpkgs#($p)" })
     }
   '';
+
 in
 {
   services.printing.enable = true;
@@ -123,7 +124,7 @@ in
     jetbrains.idea
     bun
     pkgs.bubblewrap
-    # android-studio
+    android-studio
   ];
 
   # btop's own "show_cpu_watts" (on by default) reads
