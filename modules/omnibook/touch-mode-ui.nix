@@ -94,23 +94,23 @@
 {
   nixpkgs.overlays = [
     (final: prev: {
-      kdePackages = prev.kdePackages // {
-        plasma-workspace = prev.kdePackages.plasma-workspace.overrideAttrs (old: {
+      kdePackages = prev.kdePackages.overrideScope (kdeFinal: kdePrev: {
+        plasma-workspace = kdePrev.plasma-workspace.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ./patches/plasma-systray-tabletmode.patch ];
         });
-        plasma-desktop = prev.kdePackages.plasma-desktop.overrideAttrs (old: {
+        plasma-desktop = kdePrev.plasma-desktop.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ./patches/plasma-desktop-taskmanager-tabletmode.patch ];
         });
-        aurorae = prev.kdePackages.aurorae.overrideAttrs (old: {
+        aurorae = kdePrev.aurorae.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [ ./patches/aurorae-plastik-tabletmode.patch ];
         });
-        breeze = prev.kdePackages.breeze.overrideAttrs (old: {
+        breeze = kdePrev.breeze.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
             ./patches/breeze-decoration-tabletmode.patch
             ./patches/breeze-kstyle-tabletmode.patch
           ];
         });
-      };
+      });
     })
   ];
 }

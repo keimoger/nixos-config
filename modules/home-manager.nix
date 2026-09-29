@@ -13,8 +13,35 @@
     {
       imports = [ inputs.plasma-manager.homeModules.plasma-manager ];
 
+      # Plasma 6 rejects Home Manager's usual /nix/store symlinks for QML
+      # splash files as path traversal.  Copy the theme files as regular
+      # files during activation instead.
+      home.activation.installNixosSplash = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        splash_dir="$HOME/.local/share/plasma/look-and-feel/org.nixos.nixos.desktop"
+        icon_dir="$HOME/.local/share/icons/hicolor/scalable/apps"
+        mkdir -p "$splash_dir/contents/splash/images"
+        mkdir -p "$icon_dir"
+        rm -f "$splash_dir/metadata.json" \
+          "$splash_dir/contents/splash/Splash.qml" \
+          "$splash_dir/contents/splash/images/busywidget.svgz" \
+          "$splash_dir/contents/splash/images/kde.svgz" \
+          "$splash_dir/contents/splash/images/nixos.png"
+        rm -f "$icon_dir/nix-snowflake-black.svg"
+        cp ${./assets/nixos-splash/metadata.json} "$splash_dir/metadata.json"
+        cp ${./assets/nixos-splash/Splash.qml} "$splash_dir/contents/splash/Splash.qml"
+        cp ${./assets/nixos-splash/images/busywidget.svgz} "$splash_dir/contents/splash/images/busywidget.svgz"
+        cp ${./assets/nixos-splash/images/kde.svgz} "$splash_dir/contents/splash/images/kde.svgz"
+        cp ${pkgs.nixos-icons}/share/icons/hicolor/1024x1024/apps/nix-snowflake-white.png "$splash_dir/contents/splash/images/nixos.png"
+        cp ${./assets/nix-snowflake-black.svg} "$icon_dir/nix-snowflake-black.svg"
+      '';
+
       programs.plasma = {
         enable = true;
+
+        workspace.splashScreen = {
+          engine = "KSplashQML";
+          theme = "org.nixos.nixos.desktop";
+        };
 
         # The lock screen (kscreenlocker) and the SDDM greeter
         # (modules/desktop.nix) are two entirely separate components
@@ -287,6 +314,12 @@
         # manager's script/write_config.py, which reconstructs the
         # bracket-chain form ([Libinput][1739][53202][...]) from it.
         configFile."kcminputrc"."Libinput/1739/53202/SYNA3580:00 06CB:CFD2 Touchpad"."ScrollFactor" = 2.0;
+
+        # Existing bottom-panel Application Launcher (Kickoff).  Patch its
+        # widget config in place so the rest of the hand-tuned panel layout
+        # remains untouched.
+        configFile."plasma-org.kde.plasma.desktop-appletsrc"."Containments/49/Applets/50/Configuration/General"."icon" =
+          "nix-snowflake-black";
       };
 
       home.stateVersion = "26.05";

@@ -114,7 +114,7 @@ in
           ./patches/libinput-macos-cursor-accel.patch
         ];
       });
-      kdePackages = prev.kdePackages // {
+      kdePackages = prev.kdePackages.overrideScope (kdeFinal: kdePrev: {
         # KWin's swipe-gesture completion distance (src/gestures.cpp's
         # SwipeGesture::deltaToProgress, dividing by the hardcoded
         # constant SwipeGesture::s_minimumDelta) is not exposed via any
@@ -215,14 +215,15 @@ in
         # externalizes that one too, the same way and to the same
         # [Gestures] kwinrc group (key: PartialActivationThreshold,
         # default 0.5 if unset).
-        kwin = prev.kdePackages.kwin.overrideAttrs (old: {
+        kwin = kdePrev.kwin.overrideAttrs (old: {
           patches = (old.patches or [ ]) ++ [
             ./patches/kwin-gesture-min-delta.patch
             ./patches/kwin-gesture-switch-threshold.patch
             ./patches/kwin-gesture-partial-activation-threshold.patch
+            ./patches/kwin-touchpad-inertia.patch
           ];
         });
-      };
+      });
     })
   ];
   environment.systemPackages = [

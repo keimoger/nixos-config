@@ -36,6 +36,10 @@ in
   powerManagement.resumeCommands = ''
     ${ish.ishSuspend}
     ${ish.ishResume}
+    # The ISH reload recreates and can renumber the IIO attention nodes.
+    # Restart the per-user monitor so it starts with fresh file paths and
+    # does not retain descriptors from before suspend.
+    ${pkgs.systemd}/bin/systemctl --machine=keimoger@.host --user restart presence-screen.service
   '';
 
   # Scoped precisely to these two exact, content-addressed script

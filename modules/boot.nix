@@ -1,4 +1,4 @@
-{ ... }:
+{ pkgs, ... }:
 {
   nix.settings.experimental-features = [
     "nix-command"
@@ -126,5 +126,35 @@
   };
 
   boot.initrd.systemd.enable = true;
-  boot.plymouth.enable = true;
+  # Load Intel Xe in the initramfs so KMS is ready before Plymouth starts.
+  # Without early KMS, simpledrm is replaced only during normal userspace
+  # startup, which is why the splash was visible on shutdown but not boot.
+  boot.initrd.kernelModules = [ "xe" ];
+  # Keep kernel messages, including firmware ACPI chatter, off the visible
+  # console while Plymouth owns the screen.  This also overrides NixOS's
+  # default generated loglevel=4 parameter (which otherwise comes later on
+  # the command line and wins over a manually listed loglevel=0).
+  boot.consoleLogLevel = 0;
+  boot.kernelParams = [
+    "quiet"
+    "splash"
+    "rd.systemd.show_status=false"
+    "systemd.show_status=false"
+    "udev.log_level=0"
+  ];
+
+  boot.plymouth = {
+    enable = true;
+    # NixOS's Breeze Plymouth theme renders the configured snowflake as the
+    # centered splash logo.  The generic spinner only uses it as a small
+    # bottom watermark, which is effectively invisible on this display.
+    theme = "breeze";
+    logo = "${pkgs.nixos-icons}/share/icons/hicolor/48x48/apps/nix-snowflake-white.png";
+  };
+
+  # Keep the splash up through the graphical-login handoff.  The default
+  # Plymouth units quit at multi-user.target, which is early enough on this
+  # laptop that the centered logo is gone before SDDM takes over.
+  # Leave Plymouth's normal multi-user shutdown ordering intact; delaying
+  # these units behind SDDM can block the graphical session entirely.
 }

@@ -70,6 +70,11 @@
     ];
   };
 
+  # nixos-rebuild-ng wraps activation in several changing command forms
+  # (env, nix-env, systemd-run, and switch-to-configuration). Disable the
+  # wheel password prompt so unattended builds cannot stall on that wrapper.
+  security.sudo.wheelNeedsPassword = false;
+
   hardware.uinput.enable = true;
   users.groups.uinput = { };
 

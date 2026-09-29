@@ -1,0 +1,10 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Id": "org.nixos.nixos.desktop",
+        "Name": "NixOS",
+        "Description": "NixOS Plasma splash screen",
+        "License": "MIT"
+    },
+    "X-Plasma-APIVersion": "2"
+}

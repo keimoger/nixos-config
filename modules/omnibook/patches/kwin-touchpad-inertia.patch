@@ -1,0 +1,189 @@
+--- pristine/src/pointer_input.h	2026-09-08 14:53:35.000000000 +0400
++++ working/src/pointer_input.h	2026-09-25 11:05:48.033615335 +0400
+@@ -18,6 +18,7 @@
+ #include <QObject>
+ #include <QPointF>
+ #include <QPointer>
++#include <QTimer>
+ 
+ class QWindow;
+ 
+@@ -149,6 +150,9 @@
+     void processFrame(KWin::InputDevice *device = nullptr);
+ 
+ private:
++    void kineticScrollTick();
++    void cancelKineticScroll();
++
+     enum class EdgeBarrierType {
+         NormalBarrier,
+         WindowMoveBarrier,
+@@ -182,6 +186,16 @@
+     void disconnectPointerConstraintsConnection();
+     void breakPointerConstraints(SurfaceInterface *surface);
+     CursorImage *m_cursor;
++    // This runs after libinput has recognized a finger-scroll sequence. It
++    // never creates or modifies touch contacts or gesture state.
++    QTimer m_kineticTimer;
++    QPointer<InputDevice> m_kineticDevice;
++    qreal m_kineticVelocityX = 0;
++    qreal m_kineticVelocityY = 0;
++    std::chrono::microseconds m_kineticLastTime{ 0 };
++    bool m_kineticHaveLastTime = false;
++    bool m_kineticInverted = false;
++    bool m_kineticInjecting = false;
+     QPointF m_pos;
+     QHash<uint32_t, PointerButtonState> m_buttons;
+     Qt::MouseButtons m_qtButtons;
+--- pristine/src/pointer_input.cpp	2026-09-08 14:53:35.000000000 +0400
++++ working/src/pointer_input.cpp	2026-09-25 11:05:48.034615331 +0400
+@@ -49,6 +49,14 @@
+ 
+ #include <cmath>
+ 
++namespace {
++// Diagnostic rebuild marker #3: no runtime behavior change.
++constexpr auto kineticTick = std::chrono::milliseconds(16);
++constexpr qreal kineticDecay = 0.86;
++constexpr qreal kineticStop = 0.08;
++constexpr qreal kineticMaxVelocity = 80.0;
++}
++
+ namespace KWin
+ {
+ 
+@@ -73,10 +80,18 @@
+ PointerInputRedirection::PointerInputRedirection(InputRedirection *parent)
+     : InputDeviceHandler(parent)
+     , m_cursor(nullptr)
++    , m_kineticTimer(this)
+ {
++    m_kineticTimer.setInterval(kineticTick);
++    m_kineticTimer.setTimerType(Qt::PreciseTimer);
++    m_kineticTimer.setSingleShot(false);
++    connect(&m_kineticTimer, &QTimer::timeout, this, &PointerInputRedirection::kineticScrollTick);
+ }
+ 
+-PointerInputRedirection::~PointerInputRedirection() = default;
++PointerInputRedirection::~PointerInputRedirection()
++{
++    cancelKineticScroll();
++}
+ 
+ CursorTheme PointerInputRedirection::cursorTheme() const
+ {
+@@ -249,6 +263,7 @@
+ 
+ void PointerInputRedirection::processMotion(const QPointF &delta, const QPointF &deltaNonAccelerated, std::chrono::microseconds time, InputDevice *device)
+ {
++    cancelKineticScroll();
+     if (input()->syncTabletWithMouse()) {
+         if (const auto position = input()->takeLastPosition()) {
+             m_pos = *position;
+@@ -290,6 +305,7 @@
+ 
+ void PointerInputRedirection::processButton(uint32_t button, PointerButtonState state, std::chrono::microseconds time, InputDevice *device)
+ {
++    cancelKineticScroll();
+     input()->setLastInputHandler(this);
+     if (!inited()) {
+         return;
+@@ -330,9 +346,98 @@
+     }
+ }
+ 
++void PointerInputRedirection::cancelKineticScroll()
++{
++    m_kineticTimer.stop();
++    m_kineticDevice = nullptr;
++    m_kineticVelocityX = 0;
++    m_kineticVelocityY = 0;
++    m_kineticHaveLastTime = false;
++    m_kineticInverted = false;
++}
++
++void PointerInputRedirection::kineticScrollTick()
++{
++    if (!m_kineticDevice) {
++        cancelKineticScroll();
++        return;
++    }
++
++    // Some touchpad paths do not emit a zero-delta Finger event at release.
++    // When the timer was armed as a one-shot, turn it into the repeating
++    // kinetic timer once the quiet interval expires.
++    if (m_kineticTimer.isSingleShot()) {
++        m_kineticTimer.setSingleShot(false);
++    }
++
++    m_kineticVelocityX *= kineticDecay;
++    m_kineticVelocityY *= kineticDecay;
++    if (std::abs(m_kineticVelocityX) <= kineticStop
++        && std::abs(m_kineticVelocityY) <= kineticStop) {
++        cancelKineticScroll();
++        return;
++    }
++
++    m_kineticLastTime += std::chrono::duration_cast<std::chrono::microseconds>(kineticTick);
++    m_kineticInjecting = true;
++    if (std::abs(m_kineticVelocityY) > kineticStop) {
++        processAxis(PointerAxis::Vertical, m_kineticVelocityY, 0,
++                    PointerAxisSource::Continuous, m_kineticInverted, m_kineticLastTime, m_kineticDevice);
++    }
++    if (std::abs(m_kineticVelocityX) > kineticStop) {
++        processAxis(PointerAxis::Horizontal, m_kineticVelocityX, 0,
++                    PointerAxisSource::Continuous, m_kineticInverted, m_kineticLastTime, m_kineticDevice);
++    }
++    m_kineticInjecting = false;
++}
++
+ void PointerInputRedirection::processAxis(PointerAxis axis, qreal delta, qint32 deltaV120,
+                                           PointerAxisSource source, bool inverted, std::chrono::microseconds time, InputDevice *device)
+ {
++    if (!m_kineticInjecting) {
++        if (source == PointerAxisSource::Finger && device) {
++            if (m_kineticDevice && m_kineticDevice != device) {
++                cancelKineticScroll();
++            }
++            m_kineticDevice = device;
++            m_kineticInverted = inverted;
++
++            if (delta == 0) {
++                if (std::abs(m_kineticVelocityX) > kineticStop
++                    || std::abs(m_kineticVelocityY) > kineticStop) {
++                    m_kineticTimer.start();
++                }
++            } else {
++                if (m_kineticHaveLastTime) {
++                    const auto elapsed = time - m_kineticLastTime;
++                    const auto elapsedUs = elapsed.count();
++                    if (elapsedUs > 0 && elapsedUs < 250000) {
++                        const qreal perTick = delta * (kineticTick.count() * 1000.0 / elapsedUs);
++                        const qreal velocity = std::clamp(perTick, -kineticMaxVelocity, kineticMaxVelocity);
++                        if (axis == PointerAxis::Vertical) {
++                            m_kineticVelocityY = m_kineticVelocityY * 0.65 + velocity * 0.35;
++                        } else {
++                            m_kineticVelocityX = m_kineticVelocityX * 0.65 + velocity * 0.35;
++                        }
++                    }
++                } else if (axis == PointerAxis::Vertical) {
++                    m_kineticVelocityY = delta;
++                } else {
++                    m_kineticVelocityX = delta;
++                }
++                m_kineticLastTime = time;
++                m_kineticHaveLastTime = true;
++                m_kineticTimer.stop();
++                // Arm release detection even without an explicit zero-delta
++                // Finger event from the backend.
++                m_kineticTimer.setSingleShot(true);
++                m_kineticTimer.start(40);
++            }
++        } else if (source != PointerAxisSource::Continuous) {
++            cancelKineticScroll();
++        }
++    }
++
+     input()->setLastInputHandler(this);
+     if (!inited()) {
+         return;

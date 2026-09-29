@@ -63,10 +63,12 @@ let
     proximity handling instead of using it.
     """
     import glob
+    import os
     import subprocess
     import time
 
     KSCREEN_DOCTOR = "${pkgs.kdePackages.libkscreen}/bin/kscreen-doctor"
+    BUSCTL = "${pkgs.systemd}/bin/busctl"
 
     # was 0.1 -- a constant 10Hz background wakeup, all day, was the
     # leading suspect for why Power Saver mode started visibly hurting
@@ -92,7 +94,7 @@ let
 
 
     def find_attention_paths():
-        paths = []
+        candidates = []
         for name_path in glob.glob("/sys/bus/iio/devices/iio:device*/name"):
             try:
                 with open(name_path) as f:
@@ -102,8 +104,19 @@ let
             if name != "prox":
                 continue
             att_path = name_path[: -len("name")] + "in_attention_input"
-            paths.append(att_path)
-        return paths
+            try:
+                device_path = os.path.realpath(os.path.join(os.path.dirname(name_path), "device"))
+            except OSError:
+                device_path = ""
+            candidates.append((att_path, device_path))
+
+        # The USB camera exposes a duplicate prox node whose attention value
+        # is effectively always present. Prefer the ISH-attached node, which
+        # is the actual human-presence sensor. During resume the ISH node can
+        # appear several seconds after the camera node, so the caller also
+        # refreshes this selection while running.
+        ish = [path for path, device in candidates if "/0000:00:12.0/" in device]
+        return ish or [path for path, _device in candidates]
 
 
     def read_present(paths):
@@ -113,11 +126,22 @@ let
         read failure can't be misread as "away" and blank the screen."""
         saw_reading = False
         for p in paths:
+            fd = None
             try:
-                with open(p) as f:
-                    value = int(f.read().strip())
-            except (OSError, ValueError):
+                # Some duplicate HID-IIO proxy nodes can block a normal
+                # sysfs read after the sensor hub has gone idle. Open the
+                # attribute nonblocking so one stale duplicate cannot stop
+                # us from reaching the responsive copy.
+                fd = os.open(p, os.O_RDONLY | os.O_NONBLOCK)
+                value = int(os.read(fd, 64).decode().strip())
+            except (OSError, UnicodeError, ValueError):
                 continue
+            finally:
+                if fd is not None:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
             saw_reading = True
             if value > 0:
                 return True
@@ -129,6 +153,28 @@ let
             [KSCREEN_DOCTOR, "--dpms", "on" if on else "off"],
             check=False,
         )
+
+
+    def read_tablet_mode():
+        """Return KWin's tablet-mode state, or None if unavailable."""
+        try:
+            result = subprocess.run(
+                [
+                    BUSCTL, "--user", "get-property",
+                    "org.kde.KWin", "/org/kde/KWin",
+                    "org.kde.KWin.TabletModeManager", "tabletMode",
+                ],
+                capture_output=True, text=True, timeout=1,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if result.returncode != 0:
+            return None
+        fields = result.stdout.strip().split()
+        if not fields or fields[-1].lower() not in {"true", "false"}:
+            return None
+        return fields[-1].lower() == "true"
 
 
     def log(msg):
@@ -152,11 +198,21 @@ let
         paths = find_attention_paths()
         log(f"watching: {paths}" if paths else "no HID proximity ('prox') sensor found yet, will keep looking")
 
-        screen_off = False
+        # A resume/restart can happen while DPMS is still off. Treat the
+        # first present reading as permission to wake it immediately.
+        screen_off = True
         away_since = None
         last_present = None
 
         while True:
+            # Sensor nodes are recreated asynchronously after resume. Keep
+            # preferring the ISH node once it appears, even if the fallback
+            # camera node was readable at startup.
+            discovered = find_attention_paths()
+            if discovered != paths:
+                paths = discovered
+                log(f"re-discovered sensor paths: {paths}")
+
             present = read_present(paths) if paths else None
             if present is None:
                 rediscovered = find_attention_paths()
@@ -181,9 +237,13 @@ let
                     away_since = time.monotonic()
                     log(f"away, starting {AWAY_DEBOUNCE_SECONDS}s debounce")
                 elif not screen_off and time.monotonic() - away_since >= AWAY_DEBOUNCE_SECONDS:
-                    log("debounce elapsed -- dpms off")
-                    set_dpms(False)
-                    screen_off = True
+                    if read_tablet_mode() is True:
+                        log("debounce elapsed, but tablet mode is active -- keeping dpms on")
+                        away_since = None
+                    else:
+                        log("debounce elapsed -- dpms off")
+                        set_dpms(False)
+                        screen_off = True
 
             time.sleep(POLL_INTERVAL_SECONDS)
 

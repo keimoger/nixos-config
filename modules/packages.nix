@@ -49,6 +49,21 @@ in
 {
   services.printing.enable = true;
 
+  # fwupd-refresh calls fwupdmgr, which asks PolicyKit for authorization.
+  # The timer can otherwise race polkit during boot and fail with
+  # "PolicyKit daemon is not available", causing nixos-rebuild activation
+  # to report a failed unit even though fwupd itself is healthy.
+  systemd.services.fwupd-refresh = {
+    wants = [
+      "network-online.target"
+      "polkit.service"
+    ];
+    after = [
+      "network-online.target"
+      "polkit.service"
+    ];
+  };
+
   programs.nushell = {
     enable = true;
     autoloads = [
@@ -125,6 +140,7 @@ in
     bun
     pkgs.bubblewrap
     android-studio
+    tree
   ];
 
   # btop's own "show_cpu_watts" (on by default) reads

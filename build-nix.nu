@@ -25,6 +25,13 @@
 #   nu build-nix.nu            # no mode given -- picks interactively
 
 def main [mode?: string] {
+    # Always operate from the directory containing this script, so it can be
+    # invoked as `nu /home/keimoger/nix-config/build-nix.nu local` from any
+    # working directory.  FILE_PWD is set by Nushell for the current script;
+    # the fallback keeps `source build-nix.nu` usable from an interactive cwd.
+    let config_dir = ($env.FILE_PWD? | default (pwd) | path expand)
+    cd $config_dir
+
     let chosen = if $mode != null {
         $mode
     } else {
@@ -68,10 +75,18 @@ def main [mode?: string] {
 def copy-back-outputs [ssh_host: string, remote_port: int, built_drv: string, outputs: string = "out"] {
     print $"  copying back \(($outputs))..."
 
-    let built_paths = (
+    let remote_result = (
         ssh $ssh_host -p $remote_port nix build --print-out-paths --extra-experimental-features '"nix-command flakes"' $"($built_drv)^($outputs)"
-        | lines
+        | complete
     )
+    if $remote_result.exit_code != 0 {
+        print -e $remote_result.stderr
+        error make { msg: $"remote output-path lookup failed (exit ($remote_result.exit_code))" }
+    }
+    let built_paths = ($remote_result.stdout | lines | where {|path| $path != "" })
+    if ($built_paths | is-empty) {
+        error make { msg: $"remote build returned no paths for ($built_drv)^($outputs)" }
+    }
 
     # --no-check-sigs: paths built on the remote box aren't signed by
     # any key the local daemon already trusts, so it refuses them by
@@ -88,7 +103,9 @@ def copy-back-outputs [ssh_host: string, remote_port: int, built_drv: string, ou
     # internal-json activity stream for copy/substitution progress too,
     # not just builds, so route through it the same way instead of
     # nix copy's own (non-rendering, here) display.
-    nix copy --log-format internal-json -v --no-check-sigs --from ssh-ng://($ssh_host):($remote_port) ...$built_paths o+e>| nom --json
+    try {
+        nix copy --log-format internal-json -v --no-check-sigs --from ssh-ng://($ssh_host):($remote_port) ...$built_paths o+e>| nom --json
+    }
 
     print $"  ($outputs) copied."
 }
@@ -98,6 +115,8 @@ def build-remote [] {
     let remote_port = 2222
     let ssh_host = $"builder@($remote_addr)"
     let host = (hostname)
+    mkdir build-logs
+    let build_log = "build-logs/remote-build.log"
 
     let built_drv = (nix eval $".#nixosConfigurations.($host).config.system.build.toplevel.drvPath" --json | from json)
 
@@ -110,7 +129,10 @@ def build-remote [] {
     # also be captured as a value in the same breath. copy-back-outputs
     # re-runs the build against what's now fully cached to grab the
     # path(s) near-instantly instead, with nom out of the way.
-    ssh $ssh_host -p $remote_port nix build --extra-experimental-features '"nix-command flakes"' --log-format internal-json -v $"($built_drv)^*" o+e>| nom --json
+    try {
+        ssh $ssh_host -p $remote_port nix build --extra-experimental-features '"nix-command flakes"' --log-format internal-json -v $"($built_drv)^*" o+e>| ^tee $build_log | nom --json
+    }
+    print $"  raw build log saved to ($build_log)"
 
     # "*" here (not the "out"-only default): this is the whole system
     # closure, which needs everything it actually references to
@@ -118,12 +140,25 @@ def build-remote [] {
     # known output to prefer.
     copy-back-outputs $ssh_host $remote_port $built_drv "*"
 
-    nixos-rebuild switch --flake . --sudo --builders ""
+    let local_log = "build-logs/local-after-remote.log"
+    try {
+        env NIXOS_REBUILD_NO_SYSTEMD_RUN=1 nixos-rebuild switch --flake . --sudo --builders "" o+e>| ^tee $local_log | nom
+    }
+    print $"  raw local build log saved to ($local_log)"
 }
 
 def build-local [] {
-    # Override the configured remote builders for this invocation.
-    nixos-rebuild switch --flake . --sudo --builders "" o+e>| nom
+    # Override the configured remote builders for this invocation.  Keep the
+    # stream live: capturing `nixos-rebuild` with `complete` first buffers all
+    # stdout/stderr until the build exits, which makes a long local build look
+    # frozen.  Nix's internal-json stream feeds nom incrementally while tee
+    # preserves the raw log on disk.
+    mkdir build-logs
+    let build_log = "build-logs/local-build.log"
+    try {
+        env NIXOS_REBUILD_NO_SYSTEMD_RUN=1 nixos-rebuild switch --flake . --sudo --builders "" --log-format internal-json -v o+e>| ^tee $build_log | nom --json
+    }
+    print $"  raw local build log saved to ($build_log)"
 }
 
 def build-heavy [] {
@@ -134,35 +169,29 @@ def build-heavy [] {
     # modules/omnibook/touchpad.nix and modules/omnibook/touch-mode-ui.nix
     # to build this list, rather than trusting memory). Add to this list
     # as more packages end up patched and become worth offloading too.
-    # `outputs` defaults to "out" (see copy-back-outputs's own comment
-    # for why) -- override it to "*" for a package here the moment a
-    # local build ever needs more than that from it. plasma-workspace
-    # is the first confirmed case: something else in this system's
-    # closure (other Plasma components built locally, not offloaded)
-    # links against its "dev" output at *their* build time, and Nix
-    # can't partially satisfy a derivation -- if any of its outputs
-    # are missing locally, it reruns the WHOLE build to produce them,
-    # even though "out" was already fetched. That silently threw away
-    # the entire point of offloading it: build-local ended up
-    # recompiling all of plasma-workspace from scratch anyway. "*"
-    # costs more transfer time, but that's still far cheaper than a
-    # full from-source rebuild.
+    # Every entry copies "*" because a later system realization may need a
+    # dev/debug output while building another package. Copying only "out"
+    # can make the final local phase rebuild the entire patched derivation,
+    # defeating the remote build.
     let heavy_packages = [
-        { pkg: "kdePackages.kwin", outputs: "out" } # touchpad.nix: gesture threshold/distance patches
-        { pkg: "libinput", outputs: "out" } # touchpad.nix: touchpad rotation + macos cursor accel patches
+        { pkg: "kdePackages.kwin", outputs: "*" } # touchpad.nix: gesture threshold/distance patches
+        { pkg: "libinput", outputs: "*" } # touchpad.nix: touchpad rotation + macos cursor accel patches
         { pkg: "kdePackages.plasma-workspace", outputs: "*" } # touch-mode-ui.nix: systray tabletmode patch -- other local builds need its "dev" output, see comment above
-        { pkg: "kdePackages.plasma-desktop", outputs: "out" } # touch-mode-ui.nix: taskmanager tabletmode patch
-        { pkg: "kdePackages.aurorae", outputs: "out" } # touch-mode-ui.nix: plastik tabletmode patch
-        { pkg: "kdePackages.breeze", outputs: "out" } # touch-mode-ui.nix: decoration + kstyle tabletmode patches
+        { pkg: "kdePackages.plasma-desktop", outputs: "*" } # touch-mode-ui.nix: taskmanager tabletmode patch
+        { pkg: "kdePackages.kdeplasma-addons", outputs: "*" } # large Plasma addon collection with C++/QML and Rust components
+        { pkg: "kdePackages.aurorae", outputs: "*" } # touch-mode-ui.nix: plastik tabletmode patch
+        { pkg: "kdePackages.breeze", outputs: "*" } # touch-mode-ui.nix: decoration + kstyle tabletmode patches
     ]
 
     let remote_addr = '192.168.8.16'
     let remote_port = 2222
     let ssh_host = $"builder@($remote_addr)"
     let host = (hostname)
+    mkdir build-logs
 
     for entry in $heavy_packages {
         let pkg = $entry.pkg
+        let build_log = $"build-logs/heavy-($pkg).log"
         print $"=== building ($pkg) remotely ==="
 
         let built_drv = (nix eval $".#nixosConfigurations.($host).pkgs.($pkg).drvPath" --json | from json)
@@ -172,13 +201,18 @@ def build-heavy [] {
         # Same nom-for-progress / re-run-for-the-path split as
         # build-remote above -- see its comment for why this is two
         # calls instead of one.
-        ssh $ssh_host -p $remote_port nix build --extra-experimental-features '"nix-command flakes"' --log-format internal-json -v $"($built_drv)^*" o+e>| nom --json
+        try {
+            ssh $ssh_host -p $remote_port nix build --extra-experimental-features '"nix-command flakes"' --log-format internal-json -v $"($built_drv)^*" o+e>| ^tee $build_log | nom --json
+        }
 
+        true
         copy-back-outputs $ssh_host $remote_port $built_drv $entry.outputs
+        true
     }
 
     # Everything in $heavy_packages is now already present in the local
-    # store, so this just builds everything else (the "light stuff")
-    # locally and reuses them instead of recompiling.
+    # store, including all outputs. This final local phase should therefore
+    # only realize the remaining light system closure and activate it.
+    print "=== remote heavy packages complete; realizing the remaining system locally ==="
     build-local
 }
