@@ -43,7 +43,6 @@
       })
       thunderbird
       claude-code
-      pkgs.orca-slicer
       bitwarden-desktop
       vscode
       # Forces XWayland instead of native Wayland. This display runs at
@@ -80,6 +79,11 @@
 
   services.udev.extraRules = ''
     KERNEL=="uinput", MODE="0660", GROUP="uinput", OPTIONS+="static_node=uinput"
+
+    # HP's ELAN2513 touchscreen supports firmware double-tap wake, but the
+    # gesture stops working when the I2C HID device is power-managed during
+    # s2idle. Keep this controller powered so its wake IRQ remains active.
+    SUBSYSTEM=="i2c", KERNEL=="i2c-ELAN2513:00", ATTR{power/control}="on"
   '';
 
   # Grant raw HID access to the active local session, rather than every

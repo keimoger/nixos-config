@@ -322,6 +322,16 @@
           "nix-snowflake-black";
       };
 
+      xdg.desktopEntries.orca-slicer-nightly = {
+        name = "OrcaSlicer Nightly";
+        genericName = "3D Printer Slicer";
+        comment = "OrcaSlicer nightly Flatpak with cloud sync";
+        exec = "orca-slicer-nightly %U";
+        terminal = false;
+        categories = [ "Graphics" "3DGraphics" ];
+        icon = "com.orcaslicer.OrcaSlicer";
+      };
+
       home.stateVersion = "26.05";
 
       # Krohnkite (dynamic tiling KWin script, enabled via the kwinrc

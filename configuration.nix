@@ -17,10 +17,12 @@
     ./modules/users.nix
     ./modules/plover.nix
     ./modules/packages.nix
+    ./modules/flatpak.nix
     ./modules/vboard.nix
     ./modules/keyring.nix
     ./modules/home-manager.nix
-    ./modules/iiko.nix
+    ./modules/virtualisation.nix
+    ./modules/samba-vm-share.nix
     ./modules/tailscale.nix
     ./modules/remote-builder.nix
     ./modules/bitwarden.nix

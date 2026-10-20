@@ -91,6 +91,13 @@ let
     # presence returning should feel instant, the same way Windows' own
     # version of this wakes immediately.
     AWAY_DEBOUNCE_SECONDS = 3
+    # Require a stable return before asking KWin to modeset again. This
+    # filters the brief false-positive pulses seen while the ISH sensor
+    # recovers and prevents rapid DPMS off/on cycles.
+    PRESENT_DEBOUNCE_SECONDS = 1
+    # Avoid repeatedly hammering KWin's DRM atomic commit path if the
+    # sensor chatters or a display transition fails.
+    MIN_DPMS_TOGGLE_INTERVAL_SECONDS = 30
 
 
     def find_attention_paths():
@@ -149,10 +156,27 @@ let
 
 
     def set_dpms(on: bool):
-        subprocess.run(
+        result = subprocess.run(
             [KSCREEN_DOCTOR, "--dpms", "on" if on else "off"],
             check=False,
         )
+        return result.returncode == 0
+
+
+    def external_display_connected():
+        """Return whether KScreen reports a connected non-panel output."""
+        try:
+            result = subprocess.run(
+                [KSCREEN_DOCTOR, "-o"],
+                capture_output=True, text=True, timeout=2,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        for block in result.stdout.split("Output:")[1:]:
+            if "\n\tconnected" in block and "\n\tPanel" not in block:
+                return True
+        return False
 
 
     def read_tablet_mode():
@@ -199,9 +223,13 @@ let
         log(f"watching: {paths}" if paths else "no HID proximity ('prox') sensor found yet, will keep looking")
 
         # A resume/restart can happen while DPMS is still off. Treat the
-        # first present reading as permission to wake it immediately.
+        # first stable present reading as permission to wake it promptly.
         screen_off = True
         away_since = None
+        present_since = None
+        last_dpms_change = None
+        external_display = False
+        external_checked_at = 0.0
         last_present = None
 
         while True:
@@ -212,6 +240,11 @@ let
             if discovered != paths:
                 paths = discovered
                 log(f"re-discovered sensor paths: {paths}")
+
+            now = time.monotonic()
+            if now - external_checked_at >= 5:
+                external_display = external_display_connected()
+                external_checked_at = now
 
             present = read_present(paths) if paths else None
             if present is None:
@@ -228,22 +261,57 @@ let
 
             if present:
                 away_since = None
+                if present_since is None:
+                    present_since = time.monotonic()
                 if screen_off:
-                    log("presence returned -- dpms on")
-                    set_dpms(True)
-                    screen_off = False
+                    now = time.monotonic()
+                    stable = now - present_since >= PRESENT_DEBOUNCE_SECONDS
+                    # Waking must remain responsive; the rate limit applies
+                    # only to repeated blanking requests below.
+                    if stable:
+                        log("presence returned -- dpms on")
+                        if set_dpms(True):
+                            screen_off = False
+                            last_dpms_change = now
+                        else:
+                            log("dpms on failed; will retry")
             else:
+                if external_display:
+                    # Looking at a second screen should not make the whole
+                    # desktop disappear. Keep all outputs on while an
+                    # external display is connected.
+                    away_since = None
+                    present_since = None
+                    if screen_off:
+                        log("external display connected -- dpms on")
+                        if set_dpms(True):
+                            screen_off = False
+                            last_dpms_change = time.monotonic()
+                    time.sleep(POLL_INTERVAL_SECONDS)
+                    continue
+                present_since = None
                 if away_since is None:
                     away_since = time.monotonic()
                     log(f"away, starting {AWAY_DEBOUNCE_SECONDS}s debounce")
                 elif not screen_off and time.monotonic() - away_since >= AWAY_DEBOUNCE_SECONDS:
+                    now = time.monotonic()
+                    interval_ok = (
+                        last_dpms_change is None
+                        or now - last_dpms_change >= MIN_DPMS_TOGGLE_INTERVAL_SECONDS
+                    )
+                    if not interval_ok:
+                        time.sleep(POLL_INTERVAL_SECONDS)
+                        continue
                     if read_tablet_mode() is True:
                         log("debounce elapsed, but tablet mode is active -- keeping dpms on")
                         away_since = None
                     else:
                         log("debounce elapsed -- dpms off")
-                        set_dpms(False)
-                        screen_off = True
+                        if set_dpms(False):
+                            screen_off = True
+                            last_dpms_change = now
+                        else:
+                            log("dpms off failed; keeping display state unchanged")
 
             time.sleep(POLL_INTERVAL_SECONDS)
 

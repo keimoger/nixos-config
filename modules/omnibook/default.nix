@@ -53,7 +53,6 @@
     ./biometrics.nix
     # ./copilot-key.nix
     ./touch-mode-ui.nix
-    ./presence-screen.nix
     ./ish-resume-hook.nix
   ];
 }

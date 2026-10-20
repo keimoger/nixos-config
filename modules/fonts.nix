@@ -1,6 +1,41 @@
 { pkgs, ... }:
+let
+  cascadiaFonts = pkgs.stdenvNoCC.mkDerivation {
+    pname = "cascadia-local-fonts";
+    version = "2026-10-07";
+    src = ../assets/cascadia-fonts;
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p $out/share/fonts/truetype/cascadia
+      cp $src/*.ttf $out/share/fonts/truetype/cascadia/
+    '';
+  };
+  playfairFonts = pkgs.stdenvNoCC.mkDerivation {
+    pname = "playfair-display-local-fonts";
+    version = "2025-09-11";
+    src = ../assets/playfair-fonts;
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p $out/share/fonts/truetype/playfair-display
+      cp $src/*.ttf $out/share/fonts/truetype/playfair-display/
+    '';
+  };
+  timesNewRomanFonts = pkgs.stdenvNoCC.mkDerivation {
+    pname = "times-new-roman-local-fonts";
+    version = "2022-02-05";
+    src = ../assets/times-new-roman;
+    dontUnpack = true;
+    installPhase = ''
+      mkdir -p $out/share/fonts/truetype/times-new-roman
+      cp $src/*.ttf $out/share/fonts/truetype/times-new-roman/
+    '';
+  };
+in
 {
   fonts.packages = with pkgs; [
+    cascadiaFonts
+    playfairFonts
+    timesNewRomanFonts
     noto-fonts
     noto-fonts-cjk-sans
     noto-fonts-color-emoji
@@ -15,6 +50,8 @@
     enable = true;
     defaultFonts = {
       monospace = [
+        "Cascadia Code"
+        "Cascadia Mono"
         "JetBrainsMono Nerd Font"
         "DejaVu Sans Mono"
       ];
@@ -23,6 +60,8 @@
         "Noto Sans"
       ];
       serif = [
+        "Playfair Display"
+        "Times New Roman"
         "Noto Serif"
         "DejaVu Serif"
       ];

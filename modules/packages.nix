@@ -1,5 +1,14 @@
 { pkgs, ... }:
 let
+  orcaSlicerNightly = pkgs.writeShellScriptBin "orca-slicer-nightly" ''
+    exec ${pkgs.flatpak}/bin/flatpak run \
+      --env=LANG=en_US.UTF-8 \
+      --env=LANGUAGE=en_US \
+      --env=LC_ALL=en_US.UTF-8 \
+      --env=LC_CTYPE=en_US.UTF-8 \
+      com.orcaslicer.OrcaSlicer "$@"
+  '';
+
   # `atuin init nu` just prints a static script derived from the atuin
   # binary itself, so generating it at build time keeps it pinned to
   # whatever atuin version this nixpkgs revision carries.
@@ -140,7 +149,14 @@ in
     bun
     pkgs.bubblewrap
     android-studio
+    (import ./lycheeslicer-launcher.nix { inherit pkgs; })
     tree
+    vlc
+    openscad
+    drawio
+    orcaSlicerNightly
+    freecad
+    discord
   ];
 
   # btop's own "show_cpu_watts" (on by default) reads

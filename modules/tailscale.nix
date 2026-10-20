@@ -3,11 +3,20 @@
 {
   services.tailscale.enable = true;
 
-  # Tailscale has no official Linux tray client (unlike Windows/macOS)
-  # -- trayscale is the common community GTK one, talking to the local
-  # tailscaled over its usual unix socket. System-wide XDG autostart
-  # (rather than a home-manager one) since this is a single-user
-  # machine and it keeps everything tailscale-related in one file.
+  # Start Tailscale's built-in Linux tray client with every graphical user
+  # session, so the tray icon does not depend on a one-off manual launch.
+  environment.systemPackages = [ pkgs.tailscale ];
+  systemd.user.services.tailscale-systray = {
+    description = "Tailscale system tray client";
+    after = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    wantedBy = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.tailscale}/bin/tailscale systray";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+  };
 
   # Direct P2P connectivity (NAT traversal) between tailnet peers --
   # separate from, and complementary to, trustedInterfaces below (that
