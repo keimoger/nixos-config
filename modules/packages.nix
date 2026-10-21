@@ -154,6 +154,7 @@ in
     vlc
     openscad
     drawio
+    rnote
     orcaSlicerNightly
     freecad
     discord
